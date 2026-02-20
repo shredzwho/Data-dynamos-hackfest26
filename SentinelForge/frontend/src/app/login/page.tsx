@@ -24,7 +24,7 @@ export default function LoginPage() {
       if (!res.ok) throw new Error('Invalid credentials');
       
       const data = await res.json();
-      localStorage.setItem('sentinelforge_token', data.access_token);
+      localStorage.setItem('token', data.access_token);
       router.push('/dashboard');
     } catch (err) {
       setError('Invalid credentials');

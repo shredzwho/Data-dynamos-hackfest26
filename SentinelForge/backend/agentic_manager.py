@@ -1,113 +1,99 @@
 import asyncio
 import logging
-import json
-import redis.asyncio as redis
-from typing import Dict, Any, List
+import psutil
+from typing import Dict, Any
 
-from models import ThreatDetector, LogAnomalyModel
+from agents.network_model import NetworkModel
+from agents.memory_model import MemoryModel
+from agents.web_model import WebModel
+from agents.log_model import LogModel
+from agents.audit_model import AuditModel
 
 logger = logging.getLogger(__name__)
 
 class AgenticManager:
     """
-    Central orchestrator routing data to specialized AI models
-    and monitoring their health concurrently.
+    Central Controller for the 5 AI Models.
+    Runs 24/7 surveillance, passes instructions, and bubbles events directly to connected Dashboard WebSockets.
     """
-    def __init__(self):
-        # Initialize specialist models
-        self.network_model = ThreatDetector()
-        self.log_model = LogAnomalyModel()
+    def __init__(self, callback_func):
+        self.callback_func = callback_func
+        self.event_queue = asyncio.Queue()
+        self.is_running = False
         
-        # Placeholders
-        self.memory_model = None
-        self.web_model = None
-        self.audit_model = None
+        # Instantiate 5 specialized AI Agents
+        self.network_model = NetworkModel(self.event_queue)
+        self.memory_model = MemoryModel(self.event_queue)
+        self.web_model = WebModel(self.event_queue)
+        self.log_model = LogModel(self.event_queue)
+        self.audit_model = AuditModel(self.event_queue)
 
-        # Setup Async Redis Client (Broker for frontend WS)
-        self.redis = redis.from_url("redis://localhost:6379/0", decode_responses=True)
-
-    async def _check_network(self):
-        return await asyncio.to_thread(self.network_model.perform_health_check)
+    async def start(self):
+        self.is_running = True
         
-    async def _check_log(self):
-        return await asyncio.to_thread(self.log_model.perform_health_check)
-
-    async def run_health_checks(self):
-        """
-        Concurrently perform health checks on all loaded specialist models 
-        using Python 3.11+ TaskGroup for maximum speed.
-        """
-        logger.info("Starting concurrent health checks for specialist models...")
-        statuses = {}
+        # Start passive monitors
+        asyncio.create_task(self.network_model.start())
+        asyncio.create_task(self.memory_model.start())
+        asyncio.create_task(self.web_model.start())
         
-        async with asyncio.TaskGroup() as tg:
-            net_task = tg.create_task(self._check_network())
-            log_task = tg.create_task(self._check_log())
-
-        statuses = {
-            "network_model": "Healthy" if net_task.result() else "Degraded",
-            "log_model": "Healthy" if log_task.result() else "Degraded",
-            "memory_model": "Offline",
-            "web_model": "Offline",
-            "audit_model": "Offline"
-        }
+        # Start the centralized Event Consumer loop
+        asyncio.create_task(self._consume_events())
         
-        return statuses
+        # Start the Telemetry Heartbeat loop
+        self.last_bytes = (psutil.net_io_counters().bytes_recv + psutil.net_io_counters().bytes_sent)
+        asyncio.create_task(self._emit_heartbeat())
+        
+        await self._broadcast_info("MGR", "Agentic Manager online. Sub-models initialized.")
 
-    async def ingest_network_packets(self, packets: List[Dict[str, Any]]):
-        """
-        Route network packets to the network model and publish 
-        threats synchronously to Redis Streams.
-        """
-        if not self.network_model.is_healthy:
-            return []
+    async def _consume_events(self):
+        """Pulls events emitted by the 5 agents and routes them to the dashboard."""
+        while self.is_running:
+            event = await self.event_queue.get()
             
-        # Heavy CPU work offloaded to thread
-        results = await asyncio.to_thread(self.network_model.process_packet_analysis, packets)
-        
-        # Publish threats to Redis channel "dashboard_events"
-        for res in results:
-            if res.get("is_threat"):
-                event = {
-                    "event": "new_threat_alert",
-                    "data": {
-                        "id": res.get("packet_id"),
-                        "type": "Network Anomaly",
-                        "severity": "High",
-                        "probability": res.get("threat_probability")
-                    }
-                }
-                await self.redis.publish("dashboard_events", json.dumps(event))
+            # Use the injected SocketIO callback function
+            await self.callback_func(event)
+            self.event_queue.task_done()
+
+    async def _emit_heartbeat(self):
+        """Pushes live CPU, RAM, and Network speed KPIs every 2 seconds to the dashboard."""
+        while self.is_running:
+            await asyncio.sleep(2.0)
+            try:
+                cpu_pct = psutil.cpu_percent()
                 
-        return results
-        
-    async def ingest_system_logs(self, logs: List[str]):
-        """
-        Route log strings to Transformer log anomaly model.
-        """
-        if not self.log_model.is_healthy:
-            return []
-            
-        results = []
-        for log in logs:
-            res = await asyncio.to_thread(self.log_model.analyze_log, log)
-            results.append(res)
-            
-            if res.get("is_anomaly"):
+                net_io = psutil.net_io_counters()
+                current_bytes = net_io.bytes_recv + net_io.bytes_sent
+                speed_mbps = ((current_bytes - self.last_bytes) / 2.0) / 1_000_000
+                self.last_bytes = current_bytes
+
                 event = {
-                    "event": "new_threat_alert",
-                    "data": {
-                        "id": f"log_{hash(log)}",
-                        "type": "Log Anomaly Detection",
-                        "severity": "Critical",
-                        "probability": res.get("risk_score")
-                    }
+                    "type": "HEARTBEAT",
+                    "cpu": cpu_pct,
+                    "net_mbps": round(speed_mbps, 2)
                 }
-                await self.redis.publish("dashboard_events", json.dumps(event))
-        return results
+                await self.callback_func(event)
+            except Exception as e:
+                logger.error(f"Heartbeat telemetry failed: {str(e)}")
 
-    async def ingest_suspicious_packets(self, packets: List[Dict[str, Any]]):
-        if not self.network_model.is_healthy:
-            return []
-        return await asyncio.to_thread(self.network_model.analyze_suspicious_packets, packets)
+    async def stop(self):
+        self.is_running = False
+        await self.network_model.stop()
+        await self.memory_model.stop()
+        await self.web_model.stop()
+        await self._broadcast_info("MGR", "Agentic Manager offline.")
 
+    async def trigger_audit(self):
+        """Triggered by the IT Admin via the Dashboard."""
+        await self._broadcast_info("MGR", "Security Audit Initiated. Waking Log & Audit Models.")
+        
+        # Wake up reactive models
+        asyncio.create_task(self.log_model.run_manual_audit())
+        asyncio.create_task(self.audit_model.generate_report())
+
+    async def _broadcast_info(self, source: str, detail: str):
+        event = {
+            "type": "INFO",
+            "model": source,
+            "detail": detail
+        }
+        await self.callback_func(event)
