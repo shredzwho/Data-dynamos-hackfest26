@@ -20,3 +20,11 @@ class AuditLog(Base):
     node_id = Column(String, index=True)
     compliance_score = Column(Float)
     detail = Column(String)
+
+class ModelConfig(Base):
+    __tablename__ = "model_configs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    agent_name = Column(String, index=True) # e.g. 'NET', 'LLM_SUPERVISOR'
+    parameter = Column(String) # e.g. 'contamination', 'threat_threshold'
+    value = Column(Float)

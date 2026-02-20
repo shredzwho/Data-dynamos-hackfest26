@@ -72,6 +72,20 @@ async def startup_event():
     # Spin up SQLite tables if missing
     Base.metadata.create_all(bind=engine)
     
+    # Load dynamic configurations from DB
+    with SessionLocal() as db:
+        configs = db.query(db_models.ModelConfig).all()
+        
+        # Group configs by agent
+        agent_configs = {}
+        for c in configs:
+            if c.agent_name not in agent_configs:
+                agent_configs[c.agent_name] = {}
+            agent_configs[c.agent_name][c.parameter] = c.value
+            
+        for agent_name, config_dict in agent_configs.items():
+            await agentic_manager.update_agent_config(agent_name, config_dict)
+    
     # Start the 24/7 Engine
     asyncio.create_task(agentic_manager.start())
 
@@ -103,6 +117,43 @@ def get_historical_data(db: Session = Depends(get_db)):
         "threats": threats,
         "audit_score": latest_audit.compliance_score if latest_audit else 100
     }
+
+class ConfigPayload(BaseModel):
+    parameter: str
+    value: float
+
+@app.get("/api/agents/config")
+def get_all_configs(db: Session = Depends(get_db)):
+    """Fetch all persisted model configurations."""
+    configs = db.query(db_models.ModelConfig).all()
+    return [{"agent_name": c.agent_name, "parameter": c.parameter, "value": c.value} for c in configs]
+
+@app.post("/api/agents/config/{agent_name}")
+async def update_config(agent_name: str, payload: ConfigPayload, db: Session = Depends(get_db)):
+    """Update a model's running configuration and persist it to SQLite."""
+    # Persist to DB
+    existing = db.query(db_models.ModelConfig).filter(
+        db_models.ModelConfig.agent_name == agent_name,
+        db_models.ModelConfig.parameter == payload.parameter
+    ).first()
+    
+    if existing:
+        existing.value = payload.value
+    else:
+        new_conf = db_models.ModelConfig(agent_name=agent_name, parameter=payload.parameter, value=payload.value)
+        db.add(new_conf)
+    db.commit()
+
+    # Hot-swap live Python objects
+    await agentic_manager.update_agent_config(agent_name, {payload.parameter: payload.value})
+    
+    await broadcast_event({
+        "type": "INFO",
+        "model": "ADMIN",
+        "detail": f"Updated AI Config: {agent_name} -> {payload.parameter} = {payload.value}"
+    })
+    
+    return {"status": "success"}
 
 @app.post("/api/quarantine/{node_id}")
 async def quarantine_node(node_id: str):
@@ -136,3 +187,11 @@ async def disconnect(sid):
 async def trigger_audit(sid, data: Dict[str, Any]):
     logger.info(f"Manual Audit Triggered by Client {sid}")
     await agentic_manager.trigger_audit()
+
+@sio.event
+async def agent_command(sid, data: Dict[str, Any]):
+    """Receives interactive text queries and commands from the dashboard Terminal."""
+    command_str = data.get("command", "").strip()
+    if command_str:
+        logger.info(f"Admin Command Received: {command_str}")
+        await agentic_manager.handle_admin_command(command_str)

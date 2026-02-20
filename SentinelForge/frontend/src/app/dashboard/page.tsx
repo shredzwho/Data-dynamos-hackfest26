@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   ShieldAlert, Activity, Cpu, Network, Server, 
   Terminal, ShieldCheck, X, Search, CheckCircle2,
-  AlertTriangle, Clock, HardDrive
+  AlertTriangle, Clock, HardDrive, Sliders
 } from "lucide-react";
 
 interface LogEntry {
@@ -42,6 +42,12 @@ export default function ProfessionalDashboard() {
   const [cpuLoad, setCpuLoad] = useState(0);
   const [netTraffic, setNetTraffic] = useState(0);
   
+  const [showTuning, setShowTuning] = useState(false);
+  const [netContamination, setNetContamination] = useState(0.05);
+  const [pytorchThreshold, setPytorchThreshold] = useState(0.80);
+  
+  const [terminalInput, setTerminalInput] = useState("");
+  
   const logsEndRef = useRef<HTMLDivElement>(null);
   const startTime = useRef(Date.now());
 
@@ -64,6 +70,20 @@ export default function ProfessionalDashboard() {
     setNodes(initialNodes);
 
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+    
+    // Fetch initial AI Configs
+    fetch(`${backendUrl}/api/agents/config`, { headers: { "Authorization": `Bearer ${token}` } })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          data.forEach(c => {
+             if (c.agent_name === "NET" && c.parameter === "contamination") setNetContamination(c.value);
+             if (c.agent_name === "NET" && c.parameter === "threat_threshold") setPytorchThreshold(c.value);
+          });
+        }
+      })
+      .catch(err => console.error("Failed to fetch configs", err));
+
     const newSocket = io(backendUrl, { auth: { token } });
     
     newSocket.on("connect", () => {
@@ -155,7 +175,32 @@ export default function ProfessionalDashboard() {
     }
   };
 
+  const updateAIConfig = async (agent: string, param: string, value: number) => {
+    try {
+      const token = localStorage.getItem("token");
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+      
+      await fetch(`${backendUrl}/api/agents/config/${agent}`, {
+        method: "POST",
+        headers: { 
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ parameter: param, value: value })
+      });
+      addLog("Admin", `Updated ${agent} ${param} to ${value}`, "success");
+    } catch (err) {
+      addLog("System", `Failed to update ${agent} config`, "error");
+    }
+  };
 
+  const handleTerminalSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && terminalInput.trim()) {
+      addLog("Admin", `> ${terminalInput}`, "warn");
+      if (socket) socket.emit("agent_command", { command: terminalInput });
+      setTerminalInput("");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-300 font-sans p-4 md:p-8 flex flex-col h-screen overflow-hidden">
@@ -286,6 +331,19 @@ export default function ProfessionalDashboard() {
               </AnimatePresence>
               <div ref={logsEndRef} className="h-4" />
             </div>
+            
+            {/* Interactive CLI Input */}
+            <div className="px-6 py-4 bg-slate-950/80 border-t border-slate-800 flex items-center gap-3 shrink-0">
+               <span className="text-emerald-400 font-mono font-bold text-sm">{">"}</span>
+               <input 
+                  type="text" 
+                  value={terminalInput}
+                  onChange={(e) => setTerminalInput(e.target.value)}
+                  onKeyDown={handleTerminalSubmit}
+                  placeholder="Type /help or chat with SOC LLM Supervisor..."
+                  className="bg-transparent border-none outline-none text-slate-200 font-mono text-sm w-full placeholder:text-slate-600"
+               />
+            </div>
           </div>
 
         </div>
@@ -333,9 +391,18 @@ export default function ProfessionalDashboard() {
 
           {/* AI Models Status */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex-1 flex flex-col overflow-hidden">
-            <h3 className="text-sm font-semibold text-slate-200 mb-6 flex items-center gap-2 shrink-0">
-              <Cpu size={18} className="text-indigo-400" />
-              AI Agent Status
+            <h3 className="text-sm font-semibold text-slate-200 mb-6 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <Cpu size={18} className="text-indigo-400" />
+                AI Agent Status
+              </div>
+              <button 
+                onClick={() => setShowTuning(true)}
+                className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-md transition-colors text-slate-400 hover:text-white"
+                title="Tune AI Models"
+              >
+                <Sliders size={16} />
+              </button>
             </h3>
             
             <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4">
@@ -490,6 +557,79 @@ export default function ProfessionalDashboard() {
                   </div>
                 </div>
 
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* AI MODEL TUNING MODAL */}
+      <AnimatePresence>
+        {showTuning && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 sm:p-8"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-slate-900 border border-slate-700 shadow-2xl w-full max-w-xl rounded-2xl flex flex-col overflow-hidden"
+            >
+              <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-950/50">
+                <div className="flex items-center gap-2">
+                  <Sliders size={20} className="text-indigo-400" />
+                  <h2 className="text-lg font-bold text-slate-100">Live AI Model Tuning</h2>
+                </div>
+                <button onClick={() => setShowTuning(false)} className="text-slate-400 hover:text-white transition-colors">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="p-8 flex flex-col gap-8">
+                
+                {/* PyTorch Threshold Slider */}
+                <div>
+                  <div className="flex justify-between items-end mb-2">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-200">PyTorch Threat Probability Threshold</h4>
+                      <p className="text-xs text-slate-500">Lowering this will trigger Deep Learning alerts more frequently.</p>
+                    </div>
+                    <span className="text-indigo-400 font-mono font-bold bg-indigo-500/10 px-2 py-1 rounded">{pytorchThreshold.toFixed(2)}</span>
+                  </div>
+                  <input 
+                    type="range" min="0.1" max="0.99" step="0.01" value={pytorchThreshold}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setPytorchThreshold(val);
+                      updateAIConfig("NET", "threat_threshold", val);
+                    }}
+                    className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                  />
+                </div>
+
+                {/* Isolation Forest Contamination Slider */}
+                <div>
+                  <div className="flex justify-between items-end mb-2">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-200">Isolation Forest Contamination Rate</h4>
+                      <p className="text-xs text-slate-500">The expected % of anomalous network traffic baseline.</p>
+                    </div>
+                    <span className="text-emerald-400 font-mono font-bold bg-emerald-500/10 px-2 py-1 rounded">{(netContamination * 100).toFixed(0)}%</span>
+                  </div>
+                  <input 
+                    type="range" min="0.01" max="0.30" step="0.01" value={netContamination}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setNetContamination(val);
+                      updateAIConfig("NET", "contamination", val);
+                    }}
+                    className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                  />
+                </div>
+                
               </div>
             </motion.div>
           </motion.div>

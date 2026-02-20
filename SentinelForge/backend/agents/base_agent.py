@@ -10,6 +10,12 @@ class BaseAgent:
         self.name = name
         self.event_queue = event_queue
         self.is_active = False
+        self.config = {}
+
+    async def update_config(self, new_config: Dict[str, Any]):
+        """Hot-swaps configuration parameters dynamically."""
+        self.config.update(new_config)
+        await self.emit_info(f"Loaded new dynamic configuration: {new_config}")
 
     async def start(self):
         """Main loop that starts monitoring."""

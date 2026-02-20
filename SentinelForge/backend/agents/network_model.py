@@ -15,8 +15,12 @@ class NetworkModel(BaseAgent):
         super().__init__(name="NET", event_queue=event_queue)
         self.last_bytes = 0
         self.traffic_history = []
-        # Expect 5% of traffic over time to be anomalous outliers
-        self.model = IsolationForest(contamination=0.05, random_state=42)
+        # Support dynamic config
+        self.config = {
+            "contamination": 0.05,
+            "threat_threshold": 0.8
+        }
+        self.model = IsolationForest(contamination=self.config["contamination"], random_state=42)
         
         try:
             self.dl_detector = ThreatDetector()
@@ -24,6 +28,16 @@ class NetworkModel(BaseAgent):
         except ImportError:
             self.dl_detector = None
             self.dl_healthy = False
+
+    async def update_config(self, new_config: dict):
+        current_contamination = self.config.get("contamination")
+        await super().update_config(new_config)
+        
+        # If contamination changed, we must rebuild the Scikit-learn model
+        if current_contamination != self.config.get("contamination"):
+            self.model = IsolationForest(contamination=self.config.get("contamination", 0.05), random_state=42)
+            self.traffic_history.clear() # Reset baseline
+            await self.emit_info(f"Rebuilt IsolationForest with new contamination rate: {self.config['contamination']}")
 
     async def _monitor(self):
         await self.emit_info("Network socket interface bound via psutil. Watching live traffic anomalies.")
@@ -84,7 +98,8 @@ class NetworkModel(BaseAgent):
                             "dest_ip": f"198.51.100.{random.randint(1,200)}"
                         })
                     
-                    threat_results = self.dl_detector.process_packet_analysis(mock_packets)
+                    threat_threshold = self.config.get("threat_threshold", 0.8)
+                    threat_results = self.dl_detector.process_packet_analysis(mock_packets, threshold_override=threat_threshold)
                     
                     for res in threat_results:
                         if res["is_threat"]:

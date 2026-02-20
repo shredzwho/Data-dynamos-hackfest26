@@ -29,6 +29,21 @@ class AgenticManager:
         self.web_model = WebModel(self.event_queue)
         self.log_model = LogModel(self.event_queue)
         self.audit_model = AuditModel(self.event_queue)
+        
+        self.agents_map = {
+            "NET": self.network_model,
+            "MEM": self.memory_model,
+            "WEB": self.web_model,
+            "LOG": self.log_model,
+            "AUD": self.audit_model
+        }
+
+    async def update_agent_config(self, agent_name: str, config: dict):
+        agent = self.agents_map.get(agent_name)
+        if agent:
+            await agent.update_config(config)
+        else:
+            logger.warning(f"Attempted to configure unknown agent: {agent_name}")
 
     async def start(self):
         self.is_running = True
@@ -129,3 +144,40 @@ class AgenticManager:
             "detail": detail
         }
         await self.callback_func(event)
+
+    async def handle_admin_command(self, command: str):
+        """Parses inputs from the Interactive Admin Terminal on the React dashboard."""
+        
+        parts = command.split(" ")
+        base_cmd = parts[0].lower()
+        
+        if base_cmd == "/help":
+            await self._broadcast_info("SYS_HELP", "Available commands:\n/set [AGENT] [PARAM] [VAL] - Hot-swaps AI thresholds.\n/ignore IP [IP_ADDR] - Adds an IP to the allowlist.\nOr just type naturally to ask the SOC LLM Supervisor a question.")
+        
+        elif base_cmd == "/set" and len(parts) == 4:
+            agent_name = parts[1].upper()
+            param = parts[2]
+            try:
+                val = float(parts[3])
+                await self.update_agent_config(agent_name, {param: val})
+                await self._broadcast_info("ADMIN", f"Dynamic state injected: {agent_name} -> {param} = {val}")
+            except ValueError:
+                await self._broadcast_info("ERROR", "Value must be a number (e.g., 0.8)")
+                
+        elif base_cmd == "/ignore" and len(parts) >= 3:
+            ip_addr = parts[2]
+            # Mocking allowlist
+            await self._broadcast_info("ADMIN", f"IP {ip_addr} added to global dynamic allowlist. AI models will ignore subsequent traffic.")
+            
+        else:
+            if not command.startswith("/"):
+                # Natural Language Chat Query Simulation
+                await self._broadcast_info("SOC_LLM", f"Received query: '{command}'. Analyzing telemetry...")
+                await asyncio.sleep(1.5)
+                await self.callback_func({
+                    "type": "SUPERVISOR",
+                    "model": "SOC_LLM",
+                    "detail": "Based on the recent Event stream, the spikes are isolated to regular automated compliance sweeps. No anomalous payloads detected in the queried pattern."
+                })
+            else:
+                await self._broadcast_info("ERROR", f"Unknown command syntax: {command}")

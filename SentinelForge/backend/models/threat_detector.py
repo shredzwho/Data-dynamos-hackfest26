@@ -58,7 +58,7 @@ class ThreatDetector:
             self.is_healthy = False
             return False
 
-    def process_packet_analysis(self, packets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def process_packet_analysis(self, packets: List[Dict[str, Any]], threshold_override: float = 0.8) -> List[Dict[str, Any]]:
         """
         Analyze a list of network packets.
         """
@@ -82,7 +82,7 @@ class ThreatDetector:
             results.append({
                 "packet_id": packet.get("packet_id"),
                 "threat_probability": threat_prob,
-                "is_threat": threat_prob > 0.8
+                "is_threat": threat_prob > threshold_override
             })
             
         return results
