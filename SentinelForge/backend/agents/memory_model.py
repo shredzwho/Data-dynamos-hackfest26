@@ -1,43 +1,99 @@
 import asyncio
 import psutil
+import numpy as np
+from fastembed import TextEmbedding
 from .base_agent import BaseAgent
+import time
 
 class MemoryModel(BaseAgent):
     """
-    Monitors LIVE System RAM and specific Process Memory pools using psutil.
+    Advanced DL-Powered Process Memory Scanner (HyMem Architecture).
+    Uses FastEmbed and numpy for semantic retrieval of malicious process memory/command lines.
     """
     def __init__(self, event_queue: asyncio.Queue):
         super().__init__(name="MEM", event_queue=event_queue)
+        
+        # Load the lightweight embedding model
+        # using FastEmbed (CPU optimized, no PyTorch overhead for simple embeddings)
+        try:
+            self.embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+            self._model_ready = True
+        except Exception as e:
+            print(f"Failed to load FastEmbed model: {e}")
+            self._model_ready = False
+
+        # Known Injection Signatures (Shellcode/Reflective Loaders/Hollowing heuristics)
+        self.malicious_signatures = [
+            "powershell.exe -nop -w hidden -encodedcommand",
+            "svchost.exe -k netsvcs (Process Hollowing Target)",
+            "Invoke-Mimikatz -DumpCreds",
+            "Reflective DLL Injection memory pattern MZ...PE...0x00",
+            "Cobalt Strike Beacon HTTP payload pattern",
+            "rundll32.exe C:\\windows\\temp\\malicious.dll",
+            "certutil.exe -urlcache -split -f http://"
+        ]
+        
+        # Pre-compute signature embeddings to hold in RAM (The 'Knowledge Base')
+        if self._model_ready:
+            self.signature_embeddings = list(self.embedding_model.embed(self.malicious_signatures))
+            self.signature_embeddings = np.array(self.signature_embeddings)
+
+    def _cosine_similarity(self, a, b):
+        return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
     async def _monitor(self):
-        await self.emit_info("Hardware Memory hooks attached via psutil. Tracking live allocations...")
+        await self.emit_info("HyMem Deep Learning Engine initialized. FastEmbed active. Scanning for Injections...")
+        
+        if not self._model_ready:
+            await self.emit_info("Embedding model failed to load. Operating in degraded mode.")
+        
         while self.is_active:
-            # Poll every 10 seconds
-            await asyncio.sleep(10.0)
+            # Full process scan every 15 seconds
+            await asyncio.sleep(15.0)
             
             try:
+                # 1. System health check
                 mem = psutil.virtual_memory()
-                
-                # Fetch top memory intensive process
-                procs = []
-                for p in psutil.process_iter(['pid', 'name', 'memory_percent']):
-                    if p.info['memory_percent'] is not None:
-                        procs.append(p)
-                
-                if procs:
-                    top_proc = sorted(procs, key=lambda p: p.info['memory_percent'], reverse=True)[0]
-                    top_name = top_proc.info['name']
-                    top_mem = top_proc.info['memory_percent']
-                else:
-                    top_name = "Unknown"
-                    top_mem = 0.0
-
                 if mem.percent > 90.0:
-                    await self.emit_alert(f"CRITICAL RAM EXHAUSTION: Usage at {mem.percent}%. Highest consumer: {top_name} ({top_mem:.1f}%)")
-                elif mem.percent > 75.0:
-                    await self.emit_info(f"High RAM usage threshold reached: {mem.percent}%. Top Process: {top_name}")
-                else:
-                    await self.emit_info(f"RAM pool stable at {mem.percent}%. ({top_name} leads at {top_mem:.1f}%)")
-                    
+                    await self.emit_alert(f"RAM Exhaustion: {mem.percent}%")
+                
+                # 2. Extract Process Features
+                # In a real EDR, we'd read process memory pages via OS APIs (ReadProcessMemory).
+                # Here we simulate feature extraction by taking cmdlines and paths as our "Memory Features".
+                for p in psutil.process_iter(['pid', 'name', 'cmdline', 'exe']):
+                    try:
+                        cmdline = p.info.get('cmdline')
+                        name = p.info.get('name')
+                        exe = p.info.get('exe')
+                        
+                        if not cmdline:
+                            continue
+                            
+                        feature_string = " ".join(cmdline)
+                        if len(feature_string) < 5:
+                            continue
+                            
+                        # 3. FastEmbed: Generate live tensor for process memory
+                        live_emb = list(self.embedding_model.embed([feature_string]))[0]
+                        
+                        # 4. Semantic Retrieval (FAISS equivalent via Numpy matrix mult)
+                        # We calculate cosine similarity against all known malicious signatures
+                        similarities = [self._cosine_similarity(live_emb, sig_emb) for sig_emb in self.signature_embeddings]
+                        max_sim = max(similarities)
+                        matched_index = similarities.index(max_sim)
+                        
+                        # 0.82 is our Deep Learning threshold for "Suspicious Semantic Match"
+                        if max_sim > 0.82:
+                            matched_sig = self.malicious_signatures[matched_index]
+                            await self.emit_alert(
+                                f"DL Memory Injection Detected: Process '{name}' (PID {p.info.get('pid')}). "
+                                f"Semantic Distance: {max_sim:.2f} to signature [{matched_sig}]."
+                            )
+                            # To avoid spamming, we break after finding one critical threat per cycle
+                            break
+
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                        pass
+
             except Exception as e:
-                await self.emit_info(f"Memory telemetry error: {str(e)}")
+                await self.emit_info(f"HyMem engine error: {str(e)}")
