@@ -28,3 +28,11 @@ class ModelConfig(Base):
     agent_name = Column(String, index=True) # e.g. 'NET', 'LLM_SUPERVISOR'
     parameter = Column(String) # e.g. 'contamination', 'threat_threshold'
     value = Column(Float)
+
+class NodeModelState(Base):
+    __tablename__ = "node_model_states"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    node_id = Column(String, index=True) # e.g. 'WS-ENT-04'
+    model_name = Column(String, index=True) # e.g. 'NET', 'LOG'
+    is_active = Column(Boolean, default=True)

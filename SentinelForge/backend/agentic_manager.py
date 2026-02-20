@@ -37,6 +37,16 @@ class AgenticManager:
             "LOG": self.log_model,
             "AUD": self.audit_model
         }
+        
+        # Phase 13: Granular Model Toggling
+        # Format: {"WS-ENT-04": {"NET": True, "LOG": False}}
+        self.node_model_states: dict[str, dict[str, bool]] = {}
+
+    def update_node_model_state(self, node_id: str, model_name: str, is_active: bool):
+        if node_id not in self.node_model_states:
+            self.node_model_states[node_id] = {}
+        self.node_model_states[node_id][model_name] = is_active
+        logger.info(f"Updated Supervisor Memory: {model_name} on {node_id} is now {'ON' if is_active else 'OFF'}")
 
     async def update_agent_config(self, agent_name: str, config: dict):
         agent = self.agents_map.get(agent_name)
@@ -66,6 +76,19 @@ class AgenticManager:
         """Pulls events emitted by the 5 agents and routes them to the dashboard."""
         while self.is_running:
             event = await self.event_queue.get()
+            
+            # Phase 13: Granular Toggling Event Enforcement
+            event_node = event.get("node_id")
+            event_model = event.get("model")
+            
+            if event_node and event_model:
+                node_states = self.node_model_states.get(event_node, {})
+                # Default to True if not explicitly set to False
+                is_active = node_states.get(event_model, True)
+                if not is_active:
+                    # Model disabled for this node, silently drop the event
+                    self.event_queue.task_done()
+                    continue
             
             # --- PHASE 3: LLM SOC SUPERVISOR CORRELATION ---
             if event.get("type") == "THREAT" or "Threat" in event.get("detail", ""):

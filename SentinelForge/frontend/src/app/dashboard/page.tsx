@@ -7,8 +7,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   ShieldAlert, Activity, Cpu, Network, Server, 
   Terminal, ShieldCheck, X, Search, CheckCircle2,
-  AlertTriangle, Clock, HardDrive, Sliders
+  AlertTriangle, Clock, HardDrive, Sliders, Download
 } from "lucide-react";
+import { AreaChart, Area, ResponsiveContainer } from "recharts";
 
 interface LogEntry {
   id: string;
@@ -39,6 +40,7 @@ export default function ProfessionalDashboard() {
   const [auditScore, setAuditScore] = useState(98);
   const [nodes, setNodes] = useState<NodeDetail[]>([]);
   const [selectedNode, setSelectedNode] = useState<NodeDetail | null>(null);
+  const [localNodeModels, setLocalNodeModels] = useState<Record<string, boolean>>({});
   
   const [cpuLoad, setCpuLoad] = useState(0);
   const [netTraffic, setNetTraffic] = useState(0);
@@ -49,6 +51,12 @@ export default function ProfessionalDashboard() {
   
   const [terminalInput, setTerminalInput] = useState("");
   
+  // Historical data for Sparklines
+  const [cpuHistory, setCpuHistory] = useState<{val: number}[]>(Array(20).fill({val: 0}));
+  const [netHistory, setNetHistory] = useState<{val: number}[]>(Array(20).fill({val: 0}));
+  const [threatHistory, setThreatHistory] = useState<{val: number}[]>(Array(20).fill({val: 0}));
+  const [nodesHistory, setNodesHistory] = useState<{val: number}[]>(Array(20).fill({val: 12}));
+
   const logsEndRef = useRef<HTMLDivElement>(null);
   const startTime = useRef(Date.now());
 
@@ -99,7 +107,11 @@ export default function ProfessionalDashboard() {
 
     newSocket.on("dashboard_events", (data: any) => {
       if (data.type === "THREAT") {
-        setActiveThreats(prev => prev + 1);
+        setActiveThreats(prev => {
+          const newVal = prev + 1;
+          setThreatHistory(h => [...h, {val: newVal}].slice(-20));
+          return newVal;
+        });
         setNodes(prev => {
           const newNodes = [...prev];
           const randomIdx = Math.floor(Math.random() * newNodes.length);
@@ -112,11 +124,24 @@ export default function ProfessionalDashboard() {
         addLog("Audit", `Compliance scan completed. Score: ${data.score}%`, data.score < 70 ? "warn" : "success");
       } else if (data.type === "HEARTBEAT") {
         setCpuLoad(data.cpu);
+        setCpuHistory(prev => [...prev, {val: data.cpu}].slice(-20));
+        
         setNetTraffic(data.net_mbps);
+        setNetHistory(prev => [...prev, {val: data.net_mbps}].slice(-20));
+        
+        // Push stable histories just to keep graphs scrolling
+        setThreatHistory(prev => [...prev, {val: prev[prev.length - 1]?.val || 0}].slice(-20));
+        setNodesHistory(prev => [...prev, {val: nodes.length}].slice(-20));
+        
       } else if (data.type === "SUPERVISOR") {
         addLog(data.model || "SOC_LLM", `🔥 ${data.detail}`, "warn");
       } else if (data.type === "RESOLUTION_SUCCESS") {
         setNodes(prev => prev.map(n => n.id === data.node_id ? { ...n, isInfected: false, isResolving: false } : n));
+        setActiveThreats(prev => {
+          const newVal = Math.max(0, prev - 1);
+          setThreatHistory(h => [...h, {val: newVal}].slice(-20));
+          return newVal;
+        });
         addLog("Admin", `Threat on ${data.node_id} was successfully resolved. Unit returned to Active Duty.`, "success");
         if (selectedNode?.id === data.node_id) {
             setSelectedNode(null);
@@ -206,6 +231,48 @@ export default function ProfessionalDashboard() {
     }
   };
 
+  useEffect(() => {
+    if (selectedNode) {
+      const fetchModels = async () => {
+        try {
+          const token = localStorage.getItem("token");
+          const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+          const res = await fetch(`${backendUrl}/api/nodes/${selectedNode.id}/models`, {
+            headers: { "Authorization": `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setLocalNodeModels(data.models || {});
+          }
+        } catch (err) {}
+      };
+      fetchModels();
+    }
+  }, [selectedNode]);
+
+  const toggleNodeModel = async (modelName: string, currentState: boolean) => {
+    if (!selectedNode) return;
+    const newState = !currentState;
+    setLocalNodeModels(prev => ({ ...prev, [modelName]: newState })); // Optimistic update
+    try {
+      const token = localStorage.getItem("token");
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+      const res = await fetch(`${backendUrl}/api/nodes/${selectedNode.id}/models/${modelName}/toggle`, {
+        method: "POST",
+        headers: { 
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ is_active: newState })
+      });
+      if (!res.ok) throw new Error("Toggle failed");
+      addLog("Admin", `Toggled ${modelName} on ${selectedNode.id} to ${newState ? "ON" : "OFF"}`, "success");
+    } catch (err) {
+      addLog("System", "Failed to toggle model.", "error");
+      setLocalNodeModels(prev => ({ ...prev, [modelName]: currentState })); // Revert on fail
+    }
+  };
+
   const updateAIConfig = async (agent: string, param: string, value: number) => {
     try {
       const token = localStorage.getItem("token");
@@ -225,11 +292,81 @@ export default function ProfessionalDashboard() {
     }
   };
 
-  const handleTerminalSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleDownloadReport = async () => {
+    try {
+      addLog("Admin", "Requesting generated Excel Threat Report from central server...", "info");
+      const token = localStorage.getItem("token");
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+      
+      const res = await fetch(`${backendUrl}/api/export/report`, {
+        method: "GET",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      
+      if (!res.ok) throw new Error("Export failed");
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "SentinelForge_Threat_Report.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      addLog("System", "Excel Report downloaded successfully.", "success");
+    } catch (err) {
+      addLog("System", "Failed to download Excel report.", "error");
+    }
+  };
+
+  const handleTerminalSubmit = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && terminalInput.trim()) {
-      addLog("Admin", `> ${terminalInput}`, "warn");
-      if (socket) socket.emit("agent_command", { command: terminalInput });
+      const command = terminalInput;
+      addLog("Admin", `> ${command}`, "warn");
       setTerminalInput("");
+      
+      try {
+        const sessionKeyB64 = localStorage.getItem("session_key");
+        if (sessionKeyB64 && socket) {
+           // Decrypt the base64 key back to ArrayBuffer then import crypto key
+           const binaryString = window.atob(sessionKeyB64);
+           const bytes = new Uint8Array(binaryString.length);
+           for (let i = 0; i < binaryString.length; i++) {
+               bytes[i] = binaryString.charCodeAt(i);
+           }
+           
+           const cryptoKey = await window.crypto.subtle.importKey(
+               "raw",
+               bytes,
+               { name: "AES-GCM" },
+               false,
+               ["encrypt"]
+           );
+           
+           const iv = window.crypto.getRandomValues(new Uint8Array(12));
+           const encodedCommand = new TextEncoder().encode(command);
+           
+           const encryptedBuffer = await window.crypto.subtle.encrypt(
+               { name: "AES-GCM", iv: iv },
+               cryptoKey,
+               encodedCommand
+           );
+           
+           // Convert IV and Cyphertext to Base64
+           const ivB64 = window.btoa(String.fromCharCode(...new Uint8Array(iv)));
+           const cipherB64 = window.btoa(String.fromCharCode(...new Uint8Array(encryptedBuffer)));
+           
+           socket.emit("agent_command", { cipherText: cipherB64, iv: ivB64 });
+        } else if (socket) {
+           // Fallback if no session key (development)
+           socket.emit("agent_command", { command: command });
+        }
+      } catch (err) {
+        addLog("System", "Failed to construct E2E encrypted tunnel.", "error");
+        console.error(err);
+      }
     }
   };
 
@@ -249,6 +386,15 @@ export default function ProfessionalDashboard() {
         </div>
         
         <div className="flex items-center gap-6 bg-slate-900/50 px-6 py-3 rounded-full border border-slate-800 backdrop-blur-md">
+          <button 
+             onClick={handleDownloadReport}
+             className="flex items-center gap-2 text-sm text-indigo-400 hover:text-indigo-300 font-medium transition-all active:scale-95"
+          >
+             <Download size={16} /> <span>Export Report</span>
+          </button>
+          
+          <div className="h-4 w-px bg-slate-800" />
+          
           <div className="flex items-center gap-2 text-sm">
             <Clock size={16} className="text-slate-500" />
             <span className="font-mono">{uptime}</span>
@@ -269,22 +415,39 @@ export default function ProfessionalDashboard() {
         {/* Left Content Area */}
         <div className="flex flex-col gap-8 min-h-0">
           
-          {/* KPI Stat Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+          {/* KPI Stat Cards with Realtime Sparkline Graphs */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 shrink-0">
             {[
-              { title: "Monitored Endpoints", value: nodes.length, icon: Server, color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20" },
-              { title: "Avg Network Traffic", value: `${netTraffic} Mbps`, icon: Activity, color: "text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-500/20", sparkline: "bg-indigo-500" },
-              { title: "Avg CPU Load", value: `${cpuLoad}%`, icon: Cpu, color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/20", sparkline: "bg-violet-500" },
-              { title: "Active Security Threats", value: activeThreats, icon: AlertTriangle, color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/30", isDanger: activeThreats > 0 }
+              { title: "Monitored Endpoints", value: nodes.length, icon: Server, color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20", data: nodesHistory, fill: "#3b82f6" },
+              { title: "Avg Network Traffic", value: `${netTraffic} Mbps`, icon: Activity, color: "text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-500/20", data: netHistory, fill: "#6366f1" },
+              { title: "Avg CPU Load", value: `${cpuLoad}%`, icon: Cpu, color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/20", data: cpuHistory, fill: "#8b5cf6" },
+              { title: "Active Security Threats", value: activeThreats, icon: AlertTriangle, color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/30", isDanger: activeThreats > 0, data: threatHistory, fill: "#f43f5e" }
             ].map((stat, i) => (
-              <div key={i} className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col relative overflow-hidden transition-colors ${stat.isDanger ? 'bg-rose-950/20 border-rose-900/50' : ''}`}>
-                <div className="flex justify-between items-start mb-4">
-                  <span className="text-sm font-medium text-slate-400">{stat.title}</span>
-                  <div className={`p-2 rounded-lg ${stat.bg} ${stat.color}`}>
+              <div key={i} className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col relative overflow-hidden transition-colors h-[150px] ${stat.isDanger ? 'bg-rose-950/20 border-rose-900/50 shadow-[0_4px_30px_rgba(225,29,72,0.15)]' : ''}`}>
+                
+                {/* Background Recharts Area */}
+                <div className="absolute inset-0 top-14 opacity-30 pointer-events-none">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={stat.data}>
+                      <Area 
+                        type="monotone" 
+                        dataKey="val" 
+                        stroke={stat.fill} 
+                        fill={stat.fill} 
+                        strokeWidth={2}
+                        isAnimationActive={false} 
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="flex justify-between items-start mb-2 relative z-10">
+                  <span className="text-sm font-medium text-slate-400 drop-shadow-md">{stat.title}</span>
+                  <div className={`p-2 rounded-lg ${stat.bg} ${stat.color} shadow-lg backdrop-blur-sm`}>
                     <stat.icon size={18} />
                   </div>
                 </div>
-                <div className={`text-3xl font-bold font-sans tracking-tight mt-auto ${stat.isDanger ? 'text-rose-500' : 'text-slate-100'}`}>
+                <div className={`text-3xl font-bold font-sans tracking-tight mt-auto relative z-10 drop-shadow-lg ${stat.isDanger ? 'text-rose-500' : 'text-slate-100'}`}>
                   {stat.value}
                 </div>
               </div>
@@ -292,23 +455,23 @@ export default function ProfessionalDashboard() {
           </div>
 
           {/* System Nodes Grid */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl flex flex-col p-6 min-h-[250px] shrink-0">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl flex flex-col p-6 flex-1 min-h-0 shrink-0">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-base font-semibold text-slate-200 flex items-center gap-2">
                 <Network size={18} className="text-blue-400" />
                 Active Workstations
               </h2>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 overflow-y-auto custom-scrollbar pr-2 min-h-0">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-5 overflow-y-auto custom-scrollbar pr-2 pb-2 min-h-0">
               {nodes.map(node => (
                 <motion.div 
                   key={node.id}
-                  whileHover={{ scale: 1.03, y: -2 }}
+                  whileHover={{ scale: 1.04, y: -4 }}
                   onClick={() => setSelectedNode(node)}
                   className={`p-4 rounded-xl border cursor-pointer transition-all flex flex-col gap-2 ${
                     node.isInfected 
                       ? "bg-rose-950/30 border-rose-500/50 shadow-[0_4px_20px_rgba(225,29,72,0.15)]" 
-                      : "bg-slate-950/50 border-slate-800 hover:border-slate-600 hover:bg-slate-800/50 hover:shadow-lg"
+                      : "bg-slate-950/50 border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800/80 hover:shadow-lg hover:shadow-indigo-500/10"
                   }`}
                 >
                   <div className="flex justify-between items-start">
@@ -335,7 +498,7 @@ export default function ProfessionalDashboard() {
               </h2>
               <button 
                 onClick={() => setLogs([])}
-                className="text-xs font-medium text-slate-500 hover:text-slate-300 transition-colors"
+                className="text-xs font-medium px-3 py-1.5 rounded bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 active:scale-95 transition-all"
               >
                 Clear Stream
               </button>
@@ -364,7 +527,7 @@ export default function ProfessionalDashboard() {
             </div>
             
             {/* Interactive CLI Input */}
-            <div className="px-6 py-4 bg-slate-950/80 border-t border-slate-800 flex items-center gap-3 shrink-0">
+            <div className="px-6 py-4 bg-slate-950/80 border-t border-slate-800 flex items-center gap-3 shrink-0 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all">
                <span className="text-emerald-400 font-mono font-bold text-sm">{">"}</span>
                <input 
                   type="text" 
@@ -372,7 +535,7 @@ export default function ProfessionalDashboard() {
                   onChange={(e) => setTerminalInput(e.target.value)}
                   onKeyDown={handleTerminalSubmit}
                   placeholder="Type /help or chat with SOC LLM Supervisor..."
-                  className="bg-transparent border-none outline-none text-slate-200 font-mono text-sm w-full placeholder:text-slate-600"
+                  className="bg-transparent border-none outline-none text-slate-200 font-mono text-sm w-full placeholder:text-slate-600 focus:ring-0"
                />
             </div>
           </div>
@@ -413,7 +576,7 @@ export default function ProfessionalDashboard() {
 
             <button 
               onClick={triggerAudit}
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/25 transition-all font-medium rounded-xl flex items-center justify-center gap-2 active:scale-95"
+              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/25 transition-all font-medium rounded-xl flex items-center justify-center gap-2 active:scale-95"
             >
               <ShieldAlert size={18} />
               Run Deep Audit
@@ -467,14 +630,14 @@ export default function ProfessionalDashboard() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 sm:p-8"
+            className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 sm:p-8"
           >
             <motion.div 
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="bg-slate-900 border border-slate-700 shadow-2xl shadow-black/50 w-full max-w-5xl h-[700px] rounded-2xl flex flex-col overflow-hidden"
+              className="bg-slate-900 border border-slate-700 shadow-2xl shadow-black/80 w-full max-w-5xl h-[700px] rounded-2xl flex flex-col overflow-hidden"
             >
               {/* Modal Header */}
               <div className="px-8 py-5 border-b border-slate-800 flex justify-between items-center bg-slate-950/50">
@@ -496,11 +659,11 @@ export default function ProfessionalDashboard() {
               </div>
 
               {/* Modal Body */}
-              <div className="flex-1 grid grid-cols-1 lg:grid-cols-[300px_1fr] p-8 gap-8 min-h-0 bg-slate-950/20">
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-[300px_1fr] p-8 gap-8 min-h-0 bg-slate-900">
                 
                 {/* Specs Sidebar */}
                 <div className="flex flex-col gap-6">
-                  <div className="bg-slate-900 rounded-xl border border-slate-800 p-6 flex-1 relative overflow-hidden">
+                  <div className="bg-slate-900 rounded-xl border border-slate-700 shadow-inner p-6 flex-1 relative overflow-hidden">
                     {selectedNode.isInfected && (
                       <div className="absolute inset-0 bg-rose-500/5 border-2 border-rose-500/50 animate-pulse rounded-xl pointer-events-none" />
                     )}
@@ -509,21 +672,21 @@ export default function ProfessionalDashboard() {
                        <HardDrive size={16} className="text-slate-400"/> Hardware Profile
                     </h3>
 
-                    <div className="space-y-5">
-                      <div>
+                    <div className="space-y-4">
+                      <div className="pb-3 border-b border-slate-800">
                         <div className="text-xs text-slate-500 mb-1">IP Address</div>
                         <div className="text-sm font-mono text-slate-200 bg-slate-950 px-3 py-2 rounded-md border border-slate-800">{selectedNode.ip}</div>
                       </div>
-                      <div>
+                      <div className="pb-3 border-b border-slate-800">
                         <div className="text-xs text-slate-500 mb-1">MAC Address</div>
                         <div className="text-sm font-mono text-slate-200 bg-slate-950 px-3 py-2 rounded-md border border-slate-800">{selectedNode.mac}</div>
                       </div>
-                      <div>
+                      <div className="pb-3 border-b border-slate-800">
                         <div className="text-xs text-slate-500 mb-1">Operating System</div>
                         <div className="text-sm font-medium text-slate-200">{selectedNode.os}</div>
                       </div>
                       
-                      <div className="pt-4 border-t border-slate-800">
+                      <div className="pt-2">
                          <div className="flex justify-between items-end mb-2">
                            <span className="text-xs text-slate-500">Memory Usage</span>
                            <span className="text-sm font-bold text-slate-200">{selectedNode.ram} GB</span>
@@ -533,7 +696,7 @@ export default function ProfessionalDashboard() {
                          </div>
                       </div>
                       
-                      <div>
+                      <div className="pt-2">
                          <div className="flex justify-between items-end mb-2">
                            <span className="text-xs text-slate-500">CPU Load</span>
                            <span className="text-sm font-bold text-slate-200">{selectedNode.cpu}%</span>
@@ -542,6 +705,46 @@ export default function ProfessionalDashboard() {
                            <div className={`h-full rounded-full ${selectedNode.cpu > 80 ? 'bg-rose-500' : 'bg-indigo-500'}`} style={{ width: `${selectedNode.cpu}%` }} />
                          </div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Phase 13: Granular Model Toggling UI */}
+                  <div className="bg-slate-900 rounded-xl border border-slate-800 p-6 flex-1 relative overflow-hidden">
+                    <h3 className="text-sm font-semibold text-slate-200 mb-6 flex items-center gap-2">
+                       <ShieldCheck size={16} className="text-emerald-500"/> Security Modules
+                    </h3>
+                    
+                    <div className="space-y-4">
+                      {[
+                        { id: 'NET', label: 'Network Analyzer', desc: 'Deep Packet Inspection' },
+                        { id: 'MEM', label: 'Memory Scanner', desc: 'Kernel Ram Heuristics' },
+                        { id: 'LOG', label: 'Log Parser', desc: 'NLP Event Correlation' },
+                        { id: 'WEB', label: 'Web Monitor', desc: 'HTTP Traffic Analysis' },
+                      ].map(model => {
+                        // Default to ON if no state exists yet
+                        const isActive = localNodeModels[model.id] ?? true;
+                        
+                        return (
+                          <div key={model.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800/80">
+                            <div>
+                               <div className="text-sm font-medium text-slate-200">{model.label}</div>
+                               <div className="text-xs text-slate-500">{model.desc}</div>
+                            </div>
+                            <button
+                              onClick={() => toggleNodeModel(model.id, isActive)}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                                isActive ? 'bg-emerald-500' : 'bg-slate-700'
+                              }`}
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                  isActive ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
