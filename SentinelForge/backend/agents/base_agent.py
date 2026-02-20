@@ -11,6 +11,15 @@ class BaseAgent:
         self.event_queue = event_queue
         self.is_active = False
         self.config = {}
+        self.subscriptions = set()
+
+    def subscribe(self, event_type: str):
+        """Register interest in a specific event type broadcasted by the Manager."""
+        self.subscriptions.add(event_type)
+
+    async def handle_event(self, event: Dict[str, Any]):
+        """Invoked by the Manager when a subscribed event fires. Override in child classes."""
+        pass
 
     async def update_config(self, new_config: Dict[str, Any]):
         """Hot-swaps configuration parameters dynamically."""

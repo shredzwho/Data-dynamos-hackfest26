@@ -4,11 +4,12 @@ import psutil
 import time
 from typing import Dict, Any
 
-from agents.network_model import NetworkModel
-from agents.memory_model import MemoryModel
-from agents.web_model import WebModel
-from agents.log_model import LogModel
-from agents.audit_model import AuditModel
+import importlib
+import inspect
+import pkgutil
+
+from agents.base_agent import BaseAgent
+from models.soc_llm import SOCSupervisorLLM
 
 logger = logging.getLogger(__name__)
 
@@ -23,24 +24,43 @@ class AgenticManager:
         self.is_running = False
         self.threat_history = []
         
-        # Instantiate 5 specialized AI Agents
-        self.network_model = NetworkModel(self.event_queue)
-        self.memory_model = MemoryModel(self.event_queue)
-        self.web_model = WebModel(self.event_queue)
-        self.log_model = LogModel(self.event_queue)
-        self.audit_model = AuditModel(self.event_queue, agentic_manager_ref=self)
+        # --- PHASE 17: GLOBAL STATE RECOVERY ---
+        import os
+        import json
+        if os.path.exists("threat_state.json"):
+            try:
+                with open("threat_state.json", "r") as f:
+                    self.threat_history = json.load(f)
+                    logger.info(f"Global State Recovery: Reloaded {len(self.threat_history)} historical threats.")
+            except Exception as e:
+                logger.error(f"Failed to recover threat history: {str(e)}")
+                
+        self._emit_timestamps = [] # Token bucket for rate limiting
         
-        self.agents_map = {
-            "NET": self.network_model,
-            "MEM": self.memory_model,
-            "WEB": self.web_model,
-            "LOG": self.log_model,
-            "AUD": self.audit_model
-        }
+        self.agents_map = {}
+        self.soc_llm = SOCSupervisorLLM()
+        self.pending_actions = {} # HITL Approval Queue
         
         # Phase 13: Granular Model Toggling
         # Format: {"WS-ENT-04": {"NET": True, "LOG": False}}
         self.node_model_states: dict[str, dict[str, bool]] = {}
+
+        self._discover_and_load_agents()
+
+    def _discover_and_load_agents(self):
+        import agents
+        for _, module_name, _ in pkgutil.iter_modules(agents.__path__):
+            if module_name == "base_agent": continue
+            module = importlib.import_module(f"agents.{module_name}")
+            for name, cls in inspect.getmembers(module, inspect.isclass):
+                if issubclass(cls, BaseAgent) and cls is not BaseAgent:
+                    sig = inspect.signature(cls.__init__)
+                    if 'agentic_manager_ref' in sig.parameters:
+                        agent = cls(self.event_queue, agentic_manager_ref=self)
+                    else:
+                        agent = cls(self.event_queue)
+                    self.agents_map[agent.name] = agent
+                    logger.info(f"Dynamically loaded agent: {agent.name} [{cls.__name__}]")
 
     def update_node_model_state(self, node_id: str, model_name: str, is_active: bool):
         if node_id not in self.node_model_states:
@@ -58,10 +78,11 @@ class AgenticManager:
     async def start(self):
         self.is_running = True
         
-        # Start passive monitors
-        asyncio.create_task(self.network_model.start())
-        asyncio.create_task(self.memory_model.start())
-        asyncio.create_task(self.web_model.start())
+        # Start passive monitors via Watchdog
+        for agent in self.agents_map.values():
+            asyncio.create_task(self._healing_watchdog(agent))
+            
+        asyncio.create_task(self.soc_llm.start())
         
         # Start the centralized Event Consumer loop
         asyncio.create_task(self._consume_events())
@@ -70,7 +91,18 @@ class AgenticManager:
         self.last_bytes = (psutil.net_io_counters().bytes_recv + psutil.net_io_counters().bytes_sent)
         asyncio.create_task(self._emit_heartbeat())
         
-        await self._broadcast_info("MGR", "Agentic Manager online. Sub-models initialized.")
+        await self._broadcast_info("MGR", "Agentic Manager online. Sub-models initialized via Watchdog.")
+
+    async def _healing_watchdog(self, agent: BaseAgent):
+        """Phase 17 Auto-Healing: Ensures agents stay online 24/7 if an exception occurs."""
+        while self.is_running:
+            try:
+                await agent.start()
+            except Exception as e:
+                logger.error(f"Agent {agent.name} crashed with exception: {str(e)}")
+                await self._broadcast_info("SYS_HEALING", f"CRITICAL: {agent.name} engine crashed! Watchdog restarting thread in 3s...")
+                await asyncio.sleep(3.0)
+                logger.info(f"Watchdog auto-restarting {agent.name}...")
 
     async def _consume_events(self):
         """Pulls events emitted by the 5 agents and routes them to the dashboard."""
@@ -90,6 +122,12 @@ class AgenticManager:
                     self.event_queue.task_done()
                     continue
             
+            # --- PHASE 17: INTERNAL PUB/SUB MESSAGING ---
+            for agent in self.agents_map.values():
+                if event.get("type") in agent.subscriptions:
+                    # Dispatch asynchronously to avoid blocking the main intake loop
+                    asyncio.create_task(agent.handle_event(event))
+            
             # --- PHASE 3: LLM SOC SUPERVISOR CORRELATION ---
             if event.get("type") == "THREAT" or "Threat" in event.get("detail", ""):
                 current_time = time.time()
@@ -103,12 +141,14 @@ class AgenticManager:
                 
                 # If 3 distinct threat events hit in the 60s window, the Supervisor awakens
                 if len(self.threat_history) >= 3:
-                    models_involved = list(set([t["model"] for t in self.threat_history]))
+                    # Offload the prompt generation to a background thread to prevent blocking
+                    analysis = await asyncio.to_thread(self.soc_llm.correlate_threats, self.threat_history)
                     
-                    if len(models_involved) > 1:
-                        analysis = f"SOC Analyst LLM: Correlated multi-vector attack detected across {', '.join(models_involved)}. High probability of synchronized intrusion or C2 beaconing. Recommend IP isolation."
-                    else:
-                        analysis = f"SOC Analyst LLM: Sustained aggressive anomaly isolated to {models_involved[0]} agent. Potential localized payload execution."
+                    # --- PHASE 17: HUMAN-IN-THE-LOOP (HITL) QUEUE ---
+                    if "isolate" in analysis.lower() or "quarantine" in analysis.lower() or "isolation" in analysis.lower():
+                        action_id = str(int(time.time()))
+                        self.pending_actions[action_id] = "quarantine"
+                        analysis += f" [ACTION REQUIRED: Type '/approve {action_id}' in terminal to execute OS-level Quarantine]"
                         
                     # Inject the supervisor's insight into the stream
                     await self.callback_func({
@@ -120,7 +160,25 @@ class AgenticManager:
                     # Clear queue to avoid spamming the generative model
                     self.threat_history.clear()
             
-            # Use the injected SocketIO callback function
+            # --- PHASE 17: WEBSOCKET RATE LIMITING & DEBOUNCING ---
+            current_time = time.time()
+            self._emit_timestamps.append(current_time)
+            # Maintain a sliding window of the last 1 second
+            self._emit_timestamps = [t for t in self._emit_timestamps if current_time - t <= 1.0]
+            
+            if len(self._emit_timestamps) > 10:
+                # We are being flooded (>10 events/sec). Throttle and bundle.
+                if len(self._emit_timestamps) == 11: # Only emit the warning once per throttle window
+                    await self.callback_func({
+                        "type": "WARNING",
+                        "model": "SYS",
+                        "detail": "High Volume Alert: Throttling WebSocket telemetry due to massive event influx (Possible DDOS)."
+                    })
+                # Drop the actual event from the dashboard to prevent React UI freeze
+                self.event_queue.task_done()
+                continue
+
+            # Standard pass-through to the injected SocketIO callback function
             await self.callback_func(event)
             self.event_queue.task_done()
 
@@ -141,15 +199,23 @@ class AgenticManager:
                     "cpu": cpu_pct,
                     "net_mbps": round(speed_mbps, 2)
                 }
+                
+                # --- PHASE 17: GLOBAL STATE BACKUP ---
+                import json
+                try:
+                    with open("threat_state.json", "w") as f:
+                        json.dump(self.threat_history, f)
+                except Exception as ex:
+                    logger.error(f"Failed to dump threat state: {str(ex)}")
+                    
                 await self.callback_func(event)
             except Exception as e:
                 logger.error(f"Heartbeat telemetry failed: {str(e)}")
 
     async def stop(self):
         self.is_running = False
-        await self.network_model.stop()
-        await self.memory_model.stop()
-        await self.web_model.stop()
+        for agent in self.agents_map.values():
+            await agent.stop()
         await self._broadcast_info("MGR", "Agentic Manager offline.")
 
     async def trigger_audit(self, scan_type: str = "deep"):
@@ -157,8 +223,13 @@ class AgenticManager:
         await self._broadcast_info("MGR", f"Security Audit Initiated ({scan_type.upper()}). Waking Log & Audit Models.")
         
         # Wake up reactive models
-        asyncio.create_task(self.log_model.run_manual_audit())
-        asyncio.create_task(self.audit_model.generate_report(scan_type=scan_type))
+        log_model = self.agents_map.get("LOG")
+        if log_model:
+            asyncio.create_task(log_model.run_manual_audit())
+        
+        audit_model = self.agents_map.get("AUD")
+        if audit_model:
+            asyncio.create_task(audit_model.generate_report(scan_type=scan_type))
 
     async def _broadcast_info(self, source: str, detail: str):
         event = {
@@ -175,7 +246,23 @@ class AgenticManager:
         base_cmd = parts[0].lower()
         
         if base_cmd == "/help":
-            await self._broadcast_info("SYS_HELP", "Available commands:\n/set [AGENT] [PARAM] [VAL] - Hot-swaps AI thresholds.\n/ignore IP [IP_ADDR] - Adds an IP to the allowlist.\nOr just type naturally to ask the SOC LLM Supervisor a question.")
+            await self._broadcast_info("SYS_HELP", "Available commands:\n/set [AGENT] [PARAM] [VAL] - Hot-swaps AI thresholds.\n/ignore IP [IP_ADDR] - Adds an IP to the allowlist.\n/approve [ID] - Approve pending HITL action.\n/deny [ID] - Deny pending HITL action.\nOr type naturally to ask the SOC LLM Supervisor a question.")
+            
+        elif base_cmd == "/approve" and len(parts) >= 2:
+            action_id = parts[1]
+            if action_id in self.pending_actions:
+                action = self.pending_actions.pop(action_id)
+                await self._broadcast_info("ADMIN", f"Action '{action}' approved [ID: {action_id}]. Initiating lockdown protocols...")
+            else:
+                await self._broadcast_info("ERROR", f"Invalid or expired action ID: {action_id}")
+                
+        elif base_cmd == "/deny" and len(parts) >= 2:
+            action_id = parts[1]
+            if action_id in self.pending_actions:
+                self.pending_actions.pop(action_id)
+                await self._broadcast_info("ADMIN", f"Action denied [ID: {action_id}]. State remains nominal.")
+            else:
+                await self._broadcast_info("ERROR", f"Invalid or expired action ID: {action_id}")
         
         elif base_cmd == "/set" and len(parts) == 4:
             agent_name = parts[1].upper()
@@ -195,12 +282,12 @@ class AgenticManager:
         else:
             if not command.startswith("/"):
                 # Natural Language Chat Query Simulation
-                await self._broadcast_info("SOC_LLM", f"Received query: '{command}'. Analyzing telemetry...")
-                await asyncio.sleep(1.5)
+                await self._broadcast_info("SOC_LLM", f"Analyzing query: '{command}'...")
+                response = await asyncio.to_thread(self.soc_llm.answer_admin_query, command)
                 await self.callback_func({
                     "type": "SUPERVISOR",
                     "model": "SOC_LLM",
-                    "detail": "Based on the recent Event stream, the spikes are isolated to regular automated compliance sweeps. No anomalous payloads detected in the queried pattern."
+                    "detail": response
                 })
             else:
                 await self._broadcast_info("ERROR", f"Unknown command syntax: {command}")

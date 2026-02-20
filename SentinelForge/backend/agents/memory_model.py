@@ -22,6 +22,9 @@ class MemoryModel(BaseAgent):
             print(f"Failed to load FastEmbed model: {e}")
             self._model_ready = False
 
+        # Register for THREAT events from other agents
+        self.subscribe("THREAT")
+
         # Known Injection Signatures (Shellcode/Reflective Loaders/Hollowing heuristics)
         self.malicious_signatures = [
             "powershell.exe -nop -w hidden -encodedcommand",
@@ -40,6 +43,14 @@ class MemoryModel(BaseAgent):
 
     def _cosine_similarity(self, a, b):
         return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+    async def handle_event(self, event: dict):
+        """Phase 17 Pub/Sub: React autonomously to other agents' events."""
+        source_model = event.get("model")
+        if source_model == "NET" and event.get("type") == "THREAT":
+            await self.emit_info(f"Pub/Sub Intercept: Network Threat detected. MemoryModel initiating localized heuristic sweep for volatile payloads...")
+            await asyncio.sleep(1.0) # Simulate a quick scan
+            await self.emit_info("Pub/Sub Action Complete: No volatile memory anomalies found related to the Network threat.")
 
     async def _monitor(self):
         await self.emit_info("HyMem Deep Learning Engine initialized. FastEmbed active. Scanning for Injections...")

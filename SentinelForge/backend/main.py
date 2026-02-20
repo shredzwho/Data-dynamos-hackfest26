@@ -249,6 +249,21 @@ def toggle_node_model(node_id: str, model_name: str, payload: TogglePayload, use
     agentic_manager.update_node_model_state(node_id, model_name, payload.is_active)
     return {"status": "success", "is_active": payload.is_active}
 
+@app.post("/api/test_threat")
+async def inject_test_threat():
+    """Phase 17 Development Hook: Flood the manager to test PubSub and SOC LLM"""
+    import random
+    agents = ["NET", "MEM", "WEB"]
+    model_name = random.choice(agents)
+    event = {
+        "type": "THREAT",
+        "model": model_name,
+        "detail": f"Synthetic {model_name} anomaly injected for Phase 17 correlation testing.",
+        "severity": "high"
+    }
+    await agentic_manager.event_queue.put(event)
+    return {"status": "injected", "model": model_name}
+
 @app.post("/api/quarantine/{node_id}")
 async def quarantine_node(node_id: str):
     """Simulate OS-level iptables or Windows Firewall network drop."""
