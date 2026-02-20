@@ -74,7 +74,7 @@ async def broadcast_event(event_dict: dict):
                 audit = db_models.AuditLog(
                     node_id="GLOBAL_ENV",
                     compliance_score=event_dict.get("score", 100),
-                    detail="Automated Audit Sweep Completed"
+                    detail=event_dict.get("report_json", "Automated Audit Sweep Completed")
                 )
                 db.add(audit)
                 db.commit()
@@ -295,8 +295,9 @@ async def disconnect(sid):
 
 @sio.event
 async def trigger_audit(sid, data: Dict[str, Any]):
-    logger.info(f"Manual Audit Triggered by Client {sid}")
-    await agentic_manager.trigger_audit()
+    scan_type = data.get("scanType", "deep")
+    logger.info(f"Manual Audit Triggered by Client {sid} with mode: {scan_type}")
+    await agentic_manager.trigger_audit(scan_type=scan_type)
 
 @sio.event
 async def agent_command(sid, data: Dict[str, Any]):

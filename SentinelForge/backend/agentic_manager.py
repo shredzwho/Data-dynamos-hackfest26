@@ -28,7 +28,7 @@ class AgenticManager:
         self.memory_model = MemoryModel(self.event_queue)
         self.web_model = WebModel(self.event_queue)
         self.log_model = LogModel(self.event_queue)
-        self.audit_model = AuditModel(self.event_queue)
+        self.audit_model = AuditModel(self.event_queue, agentic_manager_ref=self)
         
         self.agents_map = {
             "NET": self.network_model,
@@ -152,13 +152,13 @@ class AgenticManager:
         await self.web_model.stop()
         await self._broadcast_info("MGR", "Agentic Manager offline.")
 
-    async def trigger_audit(self):
+    async def trigger_audit(self, scan_type: str = "deep"):
         """Triggered by the IT Admin via the Dashboard."""
-        await self._broadcast_info("MGR", "Security Audit Initiated. Waking Log & Audit Models.")
+        await self._broadcast_info("MGR", f"Security Audit Initiated ({scan_type.upper()}). Waking Log & Audit Models.")
         
         # Wake up reactive models
         asyncio.create_task(self.log_model.run_manual_audit())
-        asyncio.create_task(self.audit_model.generate_report())
+        asyncio.create_task(self.audit_model.generate_report(scan_type=scan_type))
 
     async def _broadcast_info(self, source: str, detail: str):
         event = {

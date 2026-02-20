@@ -38,6 +38,8 @@ export default function ProfessionalDashboard() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [activeThreats, setActiveThreats] = useState(0);
   const [auditScore, setAuditScore] = useState(98);
+  const [scanMode, setScanMode] = useState<"deep" | "stealth" | "smart">("smart");
+  const [auditModalData, setAuditModalData] = useState<any>(null);
   const [nodes, setNodes] = useState<NodeDetail[]>([]);
   const [selectedNode, setSelectedNode] = useState<NodeDetail | null>(null);
   const [localNodeModels, setLocalNodeModels] = useState<Record<string, boolean>>({});
@@ -121,6 +123,11 @@ export default function ProfessionalDashboard() {
         addLog(data.model || "Network", `Threat Detected: ${data.detail}`, "error");
       } else if (data.type === "AUDIT_RESULT") {
         setAuditScore(data.score);
+        if (data.report_json) {
+           try {
+              setAuditModalData(JSON.parse(data.report_json));
+           } catch(e) {}
+        }
         addLog("Audit", `Compliance scan completed. Score: ${data.score}%`, data.score < 70 ? "warn" : "success");
       } else if (data.type === "HEARTBEAT") {
         setCpuLoad(data.cpu);
@@ -183,8 +190,8 @@ export default function ProfessionalDashboard() {
   };
 
   const triggerAudit = () => {
-    addLog("Admin", "Manual Audit Initiated. Waking Log Model...", "warn");
-    if (socket) socket.emit("trigger_audit", {});
+    addLog("Admin", `Manual Audit Initiated (${scanMode.toUpperCase()}). Waking Log Model...`, "warn");
+    if (socket) socket.emit("trigger_audit", { scanType: scanMode });
   };
 
   const handleIsolate = async () => {
@@ -574,13 +581,40 @@ export default function ProfessionalDashboard() {
               </div>
             </div>
 
-            <button 
-              onClick={triggerAudit}
-              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/25 transition-all font-medium rounded-xl flex items-center justify-center gap-2 active:scale-95"
-            >
-              <ShieldAlert size={18} />
-              Run Deep Audit
-            </button>
+            <div className="w-full flex flex-col gap-3">
+              <div className="flex bg-slate-800/50 p-1 rounded-lg border border-slate-700/50 mt-2">
+                 <button 
+                    onClick={() => setScanMode("deep")}
+                    className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${scanMode === "deep" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
+                 >
+                    DEEP
+                 </button>
+                 <button 
+                    onClick={() => setScanMode("stealth")}
+                    className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${scanMode === "stealth" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
+                 >
+                    STEALTH
+                 </button>
+                 <button 
+                    onClick={() => setScanMode("smart")}
+                    className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${scanMode === "smart" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
+                 >
+                    SMART
+                 </button>
+              </div>
+              <button 
+                onClick={triggerAudit}
+                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/25 transition-all font-medium rounded-xl flex items-center justify-center gap-2 active:scale-95"
+              >
+                <ShieldAlert size={18} />
+                Run {scanMode.charAt(0).toUpperCase() + scanMode.slice(1)} Audit
+              </button>
+              {auditModalData && (
+                 <button onClick={() => setAuditModalData({...auditModalData})} className="text-xs text-indigo-400 hover:text-indigo-300 underline underline-offset-2 mt-1 w-full text-center">
+                    View Last Report
+                 </button>
+              )}
+            </div>
           </div>
 
           {/* AI Models Status */}
@@ -887,6 +921,93 @@ export default function ProfessionalDashboard() {
                 
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* Detailed Audit Report Modal */}
+      <AnimatePresence>
+        {auditModalData && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+          >
+             <motion.div 
+               initial={{ scale: 0.95, opacity: 0 }}
+               animate={{ scale: 1, opacity: 1 }}
+               exit={{ scale: 0.95, opacity: 0 }}
+               className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]"
+             >
+                <div className="p-6 border-b border-slate-800 flex justify-between items-center shrink-0 bg-slate-800/20">
+                   <div>
+                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        <ShieldCheck className={auditModalData.compliance_score < 70 ? "text-rose-500" : "text-emerald-400"} />
+                        Deep Compliance Report
+                     </h2>
+                     <p className="text-sm text-slate-400 mt-1">
+                        Node: <span className="text-indigo-400 font-mono">{auditModalData.host}</span> | 
+                        Scan Mode: <span className="uppercase text-slate-300 ml-1">{auditModalData.scan_mode}</span>
+                     </p>
+                   </div>
+                   <button 
+                     onClick={() => setAuditModalData(null)}
+                     className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                   >
+                     <X size={20} />
+                   </button>
+                </div>
+                
+                <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-6">
+                   <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-slate-950/50 p-4 border border-slate-800 rounded-xl">
+                         <h3 className="text-xs text-slate-500 uppercase font-semibold mb-2 tracking-wider">Overall Score</h3>
+                         <div className={`text-3xl font-bold ${auditModalData.compliance_score < 70 ? "text-rose-500" : "text-emerald-400"}`}>
+                            {auditModalData.compliance_score}%
+                         </div>
+                      </div>
+                      <div className="bg-slate-950/50 p-4 border border-slate-800 rounded-xl">
+                         <h3 className="text-xs text-slate-500 uppercase font-semibold mb-2 tracking-wider">AI Engines</h3>
+                         <div className="flex flex-col gap-1 text-sm font-medium">
+                            <div className="flex justify-between">
+                               <span className="text-slate-400">PyTorch Net:</span>
+                               <span className={auditModalData.ai_health.network_pytorch_engine === "ONLINE" ? "text-emerald-400" : "text-rose-500"}>
+                                  {auditModalData.ai_health.network_pytorch_engine}
+                               </span>
+                            </div>
+                            <div className="flex justify-between">
+                               <span className="text-slate-400">HyMem Mem:</span>
+                               <span className={auditModalData.ai_health.memory_hymem_engine === "ONLINE" ? "text-emerald-400" : "text-rose-500"}>
+                                  {auditModalData.ai_health.memory_hymem_engine}
+                               </span>
+                            </div>
+                         </div>
+                      </div>
+                   </div>
+                   
+                   {auditModalData.vulnerabilities?.length > 0 ? (
+                      <div>
+                         <h3 className="text-sm font-semibold text-rose-400 flex items-center gap-2 mb-3">
+                            <AlertTriangle size={16} /> Actionable Items Found
+                         </h3>
+                         <div className="space-y-2">
+                            {auditModalData.vulnerabilities.map((v: any, i: number) => (
+                               <div key={i} className="bg-rose-500/10 border border-rose-500/20 p-3 rounded-lg flex gap-3 text-sm">
+                                  <div className="font-mono text-rose-400 shrink-0">[{v.type}]</div>
+                                  <div className="text-slate-300">{v.desc}</div>
+                               </div>
+                            ))}
+                         </div>
+                      </div>
+                   ) : (
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-lg flex items-center gap-3 text-emerald-400 text-sm">
+                         <CheckCircle2 size={18} />
+                         No critical vulnerabilities discovered. Host is compliant.
+                      </div>
+                   )}
+                </div>
+             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
