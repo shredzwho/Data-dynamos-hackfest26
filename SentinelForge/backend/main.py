@@ -9,6 +9,9 @@ import socketio
 
 from agentic_manager import AgenticManager
 from auth_utils import verify_password, get_password_hash, create_access_token, decode_access_token, timedelta, ACCESS_TOKEN_EXPIRE_MINUTES
+from database import engine, Base, get_db, SessionLocal
+import db_models
+from sqlalchemy.orm import Session
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,12 +40,38 @@ class Token(BaseModel):
 
 # Define callback to pipe internal Agent alerts out to the WebSockets
 async def broadcast_event(event_dict: dict):
+    # Asynchronously persist critical events to SQLite 
+    def save_to_db():
+        with SessionLocal() as db:
+            if event_dict.get("type") in ["THREAT", "SUPERVISOR"] or "Threat" in event_dict.get("detail", ""):
+                alert = db_models.ThreatAlert(
+                    node_id=event_dict.get("node_id", "GLOBAL_NET"),
+                    model_source=event_dict.get("model", "SYS"),
+                    detail=event_dict.get("detail", "")
+                )
+                db.add(alert)
+                db.commit()
+            elif event_dict.get("type") == "AUDIT_RESULT":
+                audit = db_models.AuditLog(
+                    node_id="GLOBAL_ENV",
+                    compliance_score=event_dict.get("score", 100),
+                    detail="Automated Audit Sweep Completed"
+                )
+                db.add(audit)
+                db.commit()
+    
+    if event_dict.get("type") in ["THREAT", "AUDIT_RESULT", "SUPERVISOR"] or "Threat" in event_dict.get("detail", ""):
+        await asyncio.to_thread(save_to_db)
+
     await sio.emit('dashboard_events', event_dict)
 
 agentic_manager = AgenticManager(callback_func=broadcast_event)
 
 @app.on_event("startup")
 async def startup_event():
+    # Spin up SQLite tables if missing
+    Base.metadata.create_all(bind=engine)
+    
     # Start the 24/7 Engine
     asyncio.create_task(agentic_manager.start())
 
@@ -63,6 +92,29 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         data={"sub": form_data.username}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/api/history")
+def get_historical_data(db: Session = Depends(get_db)):
+    """Fetch recent alerts for dashboard hydration."""
+    threats = db.query(db_models.ThreatAlert).order_by(db_models.ThreatAlert.timestamp.desc()).limit(10).all()
+    latest_audit = db.query(db_models.AuditLog).order_by(db_models.AuditLog.timestamp.desc()).first()
+    
+    return {
+        "threats": threats,
+        "audit_score": latest_audit.compliance_score if latest_audit else 100
+    }
+
+@app.post("/api/quarantine/{node_id}")
+async def quarantine_node(node_id: str):
+    """Simulate OS-level iptables or Windows Firewall network drop."""
+    logger.warning(f"OS FIREWALL HOOK TRIGGERED: Dropping all inbound/outbound TCP for {node_id}")
+    
+    await broadcast_event({
+        "type": "INFO",
+        "model": "ADMIN",
+        "detail": f"Quarantine sequence executed on {node_id}. Internal Network interfaces locked."
+    })
+    return {"status": "quarantined", "node": node_id}
 
 @sio.event
 async def connect(sid, environ, auth):

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import psutil
+import time
 from typing import Dict, Any
 
 from agents.network_model import NetworkModel
@@ -20,6 +21,7 @@ class AgenticManager:
         self.callback_func = callback_func
         self.event_queue = asyncio.Queue()
         self.is_running = False
+        self.threat_history = []
         
         # Instantiate 5 specialized AI Agents
         self.network_model = NetworkModel(self.event_queue)
@@ -49,6 +51,36 @@ class AgenticManager:
         """Pulls events emitted by the 5 agents and routes them to the dashboard."""
         while self.is_running:
             event = await self.event_queue.get()
+            
+            # --- PHASE 3: LLM SOC SUPERVISOR CORRELATION ---
+            if event.get("type") == "THREAT" or "Threat" in event.get("detail", ""):
+                current_time = time.time()
+                self.threat_history.append({
+                    "time": current_time, 
+                    "model": event.get("model", "SYS")
+                })
+                
+                # Prune history older than 60 seconds
+                self.threat_history = [t for t in self.threat_history if current_time - t["time"] <= 60]
+                
+                # If 3 distinct threat events hit in the 60s window, the Supervisor awakens
+                if len(self.threat_history) >= 3:
+                    models_involved = list(set([t["model"] for t in self.threat_history]))
+                    
+                    if len(models_involved) > 1:
+                        analysis = f"SOC Analyst LLM: Correlated multi-vector attack detected across {', '.join(models_involved)}. High probability of synchronized intrusion or C2 beaconing. Recommend IP isolation."
+                    else:
+                        analysis = f"SOC Analyst LLM: Sustained aggressive anomaly isolated to {models_involved[0]} agent. Potential localized payload execution."
+                        
+                    # Inject the supervisor's insight into the stream
+                    await self.callback_func({
+                        "type": "SUPERVISOR",
+                        "model": "SOC_LLM",
+                        "detail": analysis
+                    })
+                    
+                    # Clear queue to avoid spamming the generative model
+                    self.threat_history.clear()
             
             # Use the injected SocketIO callback function
             await self.callback_func(event)

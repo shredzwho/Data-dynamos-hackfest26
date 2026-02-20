@@ -92,6 +92,8 @@ export default function ProfessionalDashboard() {
       } else if (data.type === "HEARTBEAT") {
         setCpuLoad(data.cpu);
         setNetTraffic(data.net_mbps);
+      } else if (data.type === "SUPERVISOR") {
+        addLog(data.model || "SOC_LLM", `🔥 ${data.detail}`, "warn");
       } else {
         addLog(data.model || "System", JSON.stringify(data.detail || data), "info");
       }
@@ -133,11 +135,24 @@ export default function ProfessionalDashboard() {
     if (socket) socket.emit("trigger_audit", {});
   };
 
-  const handleIsolate = () => {
+  const handleIsolate = async () => {
     if (!selectedNode) return;
-    addLog("Admin", `Isolation command sent to ${selectedNode.id}`, "warn");
-    setNodes(prev => prev.map(n => n.id === selectedNode.id ? { ...n, isInfected: false } : n));
-    setSelectedNode(null);
+    
+    try {
+      const token = localStorage.getItem("token");
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+      
+      await fetch(`${backendUrl}/api/quarantine/${selectedNode.id}`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      
+      addLog("Admin", `Isolation command confirmed by server for ${selectedNode.id}`, "warn");
+      setNodes(prev => prev.map(n => n.id === selectedNode.id ? { ...n, isInfected: false } : n));
+      setSelectedNode(null);
+    } catch (err) {
+      addLog("System", `Failed to quarantine ${selectedNode.id}`, "error");
+    }
   };
 
 

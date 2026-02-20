@@ -1,38 +1,35 @@
-version: "3.8"
+version: '3.8'
 
 services:
   backend:
-    build:
+    build: 
       context: ./backend
       dockerfile: Dockerfile
-    container_name: sentinelforge_backend
     ports:
       - "8000:8000"
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=supersecretkey_for_jwt_sentinelforge
     depends_on:
       - redis
     volumes:
-      - ./backend:/app
+      - ./backend/sentinel.db:/app/sentinel.db
+    restart: unless-stopped
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: sentinelforge_frontend
     ports:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
     depends_on:
       - backend
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
-
+    restart: unless-stopped
+    
   redis:
     image: redis:alpine
-    container_name: sentinelforge_redis
     ports:
       - "6379:6379"
+    restart: unless-stopped
