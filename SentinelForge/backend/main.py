@@ -167,6 +167,14 @@ async def quarantine_node(node_id: str):
     })
     return {"status": "quarantined", "node": node_id}
 
+@app.post("/api/resolve/{node_id}")
+async def resolve_node_threat(node_id: str):
+    """Trigger the LLM Supervisor to autonomously write and execute a remediation patch."""
+    logger.info(f"Autonomous Resolution requested for {node_id}")
+    # Hand off to the 24/7 Agent Manager to stream the script generation over Websockets
+    asyncio.create_task(agentic_manager.trigger_autonomous_resolution(node_id))
+    return {"status": "resolving", "node": node_id}
+
 @sio.event
 async def connect(sid, environ, auth):
     """Secure connection verifying JWT token passed in WS handshake."""

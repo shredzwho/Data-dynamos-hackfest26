@@ -181,3 +181,44 @@ class AgenticManager:
                 })
             else:
                 await self._broadcast_info("ERROR", f"Unknown command syntax: {command}")
+
+    async def trigger_autonomous_resolution(self, node_id: str):
+        """Simulates the LLM Supervisor writing and executing a remediation patch."""
+        await self._broadcast_info("SOC_LLM", f"Initiating autonomous remediation sequence for infected node: {node_id}")
+        await asyncio.sleep(1.0)
+        
+        # Simulate LLM thinking and classifying the threat
+        await self.callback_func({
+            "type": "SUPERVISOR",
+            "model": "SOC_LLM",
+            "detail": f"Analyzing payload memory signatures on {node_id}... Identified rogue remote-access thread."
+        })
+        await asyncio.sleep(1.5)
+        
+        # Stream the script writing/execution
+        script_steps = [
+            f"Generating hotfix script -> `taskkill /F /IM mal_svc.exe /T`",
+            f"Executing patch... Applying Windows Firewall block to C2 outbound port 4444.",
+            f"Deploying registry key rollback patch via RPC channel..."
+        ]
+        
+        for step in script_steps:
+            await self._broadcast_info("SOC_LLM", step)
+            await asyncio.sleep(1.2)
+            
+        await self.callback_func({
+            "type": "SUPERVISOR",
+            "model": "SOC_LLM",
+            "detail": f"Remediation script finished. Handing off to Audit Model for environment verification sweep."
+        })
+        await asyncio.sleep(1.5)
+        
+        # Simulate Audit Model verification
+        await self._broadcast_info("AUD", f"Verification sweep on {node_id} passed. No anomalies detected. Infection cleared.")
+        await asyncio.sleep(0.5)
+
+        # Tell the frontend to restore the UI
+        await self.callback_func({
+            "type": "RESOLUTION_SUCCESS",
+            "node_id": node_id
+        })

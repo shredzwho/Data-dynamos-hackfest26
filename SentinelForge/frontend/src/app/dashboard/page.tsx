@@ -26,6 +26,7 @@ interface NodeDetail {
   cpu: number;
   ram: number;
   isInfected: boolean;
+  isResolving?: boolean;
 }
 
 export default function ProfessionalDashboard() {
@@ -114,6 +115,12 @@ export default function ProfessionalDashboard() {
         setNetTraffic(data.net_mbps);
       } else if (data.type === "SUPERVISOR") {
         addLog(data.model || "SOC_LLM", `🔥 ${data.detail}`, "warn");
+      } else if (data.type === "RESOLUTION_SUCCESS") {
+        setNodes(prev => prev.map(n => n.id === data.node_id ? { ...n, isInfected: false, isResolving: false } : n));
+        addLog("Admin", `Threat on ${data.node_id} was successfully resolved. Unit returned to Active Duty.`, "success");
+        if (selectedNode?.id === data.node_id) {
+            setSelectedNode(null);
+        }
       } else {
         addLog(data.model || "System", JSON.stringify(data.detail || data), "info");
       }
@@ -172,6 +179,30 @@ export default function ProfessionalDashboard() {
       setSelectedNode(null);
     } catch (err) {
       addLog("System", `Failed to quarantine ${selectedNode.id}`, "error");
+    }
+  };
+
+  const handleResolve = async () => {
+    if (!selectedNode) return;
+    
+    // Set UI to resolving state locally
+    setNodes(prev => prev.map(n => n.id === selectedNode.id ? { ...n, isResolving: true } : n));
+    setSelectedNode(prev => prev ? { ...prev, isResolving: true } : null);
+    addLog("Admin", `Initiated Autonomous Resolution sequence for ${selectedNode.id}`, "warn");
+
+    try {
+      const token = localStorage.getItem("token");
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+      
+      await fetch(`${backendUrl}/api/resolve/${selectedNode.id}`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      // The backend will fire a RESOLUTION_SUCCESS websocket event when it finishes
+    } catch (err) {
+      addLog("System", `Failed to trigger resolution on ${selectedNode.id}`, "error");
+      setNodes(prev => prev.map(n => n.id === selectedNode.id ? { ...n, isResolving: false } : n));
+      setSelectedNode(prev => prev ? { ...prev, isResolving: false } : null);
     }
   };
 
@@ -514,12 +545,33 @@ export default function ProfessionalDashboard() {
                     </div>
                   </div>
 
-                  <button 
-                    onClick={handleIsolate}
-                    className="w-full py-4 bg-rose-500/10 hover:bg-rose-600 text-rose-500 hover:text-white border border-rose-500/50 shadow-lg hover:shadow-rose-500/25 transition-all text-sm font-bold rounded-xl flex items-center justify-center gap-2"
-                  >
-                    <ShieldAlert size={18} /> Isolate Workstation
-                  </button>
+                  {selectedNode.isInfected && (
+                    <div className="flex gap-4">
+                      <button 
+                        onClick={handleIsolate}
+                        disabled={selectedNode.isResolving}
+                        className="flex-1 py-4 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all text-sm font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ShieldAlert size={18} /> Isolate (Manual)
+                      </button>
+                      <button 
+                        onClick={handleResolve}
+                        disabled={selectedNode.isResolving}
+                        className={`flex-1 py-4 text-white shadow-lg transition-all text-sm font-bold rounded-xl flex items-center justify-center gap-2 ${selectedNode.isResolving ? 'bg-indigo-600/50 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/25'}`}
+                      >
+                        {selectedNode.isResolving ? (
+                          <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Resolving...</>
+                        ) : (
+                          <><CheckCircle2 size={18} /> Auto-Resolve Threat</>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                  {!selectedNode.isInfected && (
+                    <div className="w-full py-4 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-sm font-bold rounded-xl flex items-center justify-center gap-2">
+                       <CheckCircle2 size={18} /> System Secure
+                    </div>
+                  )}
                 </div>
 
                 {/* Sub-Terminal Log */}
