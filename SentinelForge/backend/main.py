@@ -16,11 +16,20 @@ from database import engine, Base, get_db, SessionLocal
 import db_models
 from sqlalchemy.orm import Session
 import crypto_utils
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from fastapi import Request
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="SentinelForge Secure Endpoint")
+
+# --- PHASE 18: API SELF-PRESERVATION ---
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
@@ -86,6 +95,9 @@ async def broadcast_event(event_dict: dict):
 
 agentic_manager = AgenticManager(callback_func=broadcast_event)
 
+# Keep a strong reference to background tasks
+global_bg_tasks = set()
+
 @app.on_event("startup")
 async def startup_event():
     # Spin up SQLite tables if missing
@@ -111,14 +123,17 @@ async def startup_event():
             agentic_manager.update_node_model_state(ns.node_id, ns.model_name, ns.is_active)
     
     # Start the 24/7 Engine
-    asyncio.create_task(agentic_manager.start())
+    task = asyncio.create_task(agentic_manager.start())
+    global_bg_tasks.add(task)
+    task.add_done_callback(global_bg_tasks.discard)
 
 @app.on_event("shutdown")
 async def shutdown_event():
     await agentic_manager.stop()
 
 @app.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+@limiter.limit("5/minute")
+async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     if form_data.username != "admin" or not verify_password(form_data.password, MOCK_ADMIN_HASH):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

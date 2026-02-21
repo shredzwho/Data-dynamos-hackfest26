@@ -25,7 +25,8 @@ class AuditModel(BaseAgent):
         
     async def _monitor(self):
         # Driven purely by the Agentic Manager command
-        pass
+        while self.is_active:
+            await asyncio.sleep(60.0)
         
     def _scan_open_ports(self):
         """Checks for dangerous listening ports."""

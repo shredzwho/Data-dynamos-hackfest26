@@ -41,9 +41,11 @@ class SOCSupervisorLLM:
         
         if self.is_loaded and self.generator:
             # Construct a prompt for the local LLM
+            threat_details = ", ".join([f"{t['model']} (Origin: {t.get('geo', 'UNKNOWN')})" for t in threat_history])
+            
             prompt = (
                 f"As an elite Cybersecurity SOC Analyst, analyze this incident: \n"
-                f"Multiple security alerts were triggered within 60 seconds by these SentinelForge AI agents: {', '.join(models_involved)}.\n"
+                f"Multiple security alerts were triggered within 60 seconds by these SentinelForge AI agents:\n{threat_details}\n"
                 f"Write a very brief, 2-sentence urgent incident report summarizing the likely attack vector and recommending immediate isolation:\n"
             )
             try:

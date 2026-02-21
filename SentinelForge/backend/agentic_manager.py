@@ -23,6 +23,7 @@ class AgenticManager:
         self.event_queue = asyncio.Queue()
         self.is_running = False
         self.threat_history = []
+        self.bg_tasks = set()
         
         # --- PHASE 17: GLOBAL STATE RECOVERY ---
         import os
@@ -76,30 +77,50 @@ class AgenticManager:
             logger.warning(f"Attempted to configure unknown agent: {agent_name}")
 
     async def start(self):
-        self.is_running = True
-        
-        # Start passive monitors via Watchdog
-        for agent in self.agents_map.values():
-            asyncio.create_task(self._healing_watchdog(agent))
+        try:
+            print("DEBUG: AgenticManager.start() ENTERED", flush=True)
+            self.is_running = True
             
-        asyncio.create_task(self.soc_llm.start())
-        
-        # Start the centralized Event Consumer loop
-        asyncio.create_task(self._consume_events())
-        
-        # Start the Telemetry Heartbeat loop
-        self.last_bytes = (psutil.net_io_counters().bytes_recv + psutil.net_io_counters().bytes_sent)
-        asyncio.create_task(self._emit_heartbeat())
-        
-        await self._broadcast_info("MGR", "Agentic Manager online. Sub-models initialized via Watchdog.")
+            # Start passive monitors via Watchdog
+            for agent in self.agents_map.values():
+                print(f"DEBUG: Wrapping Watchdog on agent {agent.name}", flush=True)
+                task = asyncio.create_task(self._healing_watchdog(agent))
+                self.bg_tasks.add(task)
+                task.add_done_callback(self.bg_tasks.discard)
+                
+            task = asyncio.create_task(self.soc_llm.start())
+            self.bg_tasks.add(task)
+            task.add_done_callback(self.bg_tasks.discard)
+            
+            # Start the centralized Event Consumer loop
+            task = asyncio.create_task(self._consume_events())
+            self.bg_tasks.add(task)
+            task.add_done_callback(self.bg_tasks.discard)
+            
+            # Start the Telemetry Heartbeat loop
+            self.last_bytes = (psutil.net_io_counters().bytes_recv + psutil.net_io_counters().bytes_sent)
+            task = asyncio.create_task(self._emit_heartbeat())
+            self.bg_tasks.add(task)
+            task.add_done_callback(self.bg_tasks.discard)
+            
+            await self._broadcast_info("MGR", "Agentic Manager online. Sub-models initialized via Watchdog.")
+        except Exception as e:
+            logger.error(f"FATAL: AgenticManager failed to start! Exception: {e}")
 
     async def _healing_watchdog(self, agent: BaseAgent):
         """Phase 17 Auto-Healing: Ensures agents stay online 24/7 if an exception occurs."""
+        print(f"DEBUG: Watchdog Task Started for {agent.name}", flush=True)
         while self.is_running:
             try:
+                print(f"DEBUG: Awaiting agent.start() for {agent.name}", flush=True)
                 await agent.start()
             except Exception as e:
                 logger.error(f"Agent {agent.name} crashed with exception: {str(e)}")
+            
+            # Prevent infinite CPU spin if an agent's start() returns immediately
+            await asyncio.sleep(2.0)
+            
+            if self.is_running:
                 await self._broadcast_info("SYS_HEALING", f"CRITICAL: {agent.name} engine crashed! Watchdog restarting thread in 3s...")
                 await asyncio.sleep(3.0)
                 logger.info(f"Watchdog auto-restarting {agent.name}...")
@@ -131,9 +152,18 @@ class AgenticManager:
             # --- PHASE 3: LLM SOC SUPERVISOR CORRELATION ---
             if event.get("type") == "THREAT" or "Threat" in event.get("detail", ""):
                 current_time = time.time()
+                
+                # Try to natively extract IP/Geo strings from the raw event detail
+                geo_tag = "UNKNOWN"
+                if "[" in event.get("detail", "") and "]" in event.get("detail", ""):
+                    try:
+                        geo_tag = event.get("detail", "").split("[")[1].split("]")[0]
+                    except: pass
+                    
                 self.threat_history.append({
                     "time": current_time, 
-                    "model": event.get("model", "SYS")
+                    "model": event.get("model", "SYS"),
+                    "geo": geo_tag
                 })
                 
                 # Prune history older than 60 seconds
@@ -144,11 +174,14 @@ class AgenticManager:
                     # Offload the prompt generation to a background thread to prevent blocking
                     analysis = await asyncio.to_thread(self.soc_llm.correlate_threats, self.threat_history)
                     
-                    # --- PHASE 17: HUMAN-IN-THE-LOOP (HITL) QUEUE ---
+                    # --- PHASE 17 & 18: HUMAN-IN-THE-LOOP (HITL) QUEUE ---
                     if "isolate" in analysis.lower() or "quarantine" in analysis.lower() or "isolation" in analysis.lower():
                         action_id = str(int(time.time()))
-                        self.pending_actions[action_id] = "quarantine"
-                        analysis += f" [ACTION REQUIRED: Type '/approve {action_id}' in terminal to execute OS-level Quarantine]"
+                        
+                        target_entity = event.get("node_id", "127.0.0.1")
+                        
+                        self.pending_actions[action_id] = {"action": "quarantine", "target": target_entity}
+                        analysis += f" [ACTION REQUIRED: Type '/approve {action_id}' in terminal to execute OS-level Quarantine on {target_entity}]"
                         
                     # Inject the supervisor's insight into the stream
                     await self.callback_func({
@@ -251,8 +284,20 @@ class AgenticManager:
         elif base_cmd == "/approve" and len(parts) >= 2:
             action_id = parts[1]
             if action_id in self.pending_actions:
-                action = self.pending_actions.pop(action_id)
-                await self._broadcast_info("ADMIN", f"Action '{action}' approved [ID: {action_id}]. Initiating lockdown protocols...")
+                pending = self.pending_actions.pop(action_id)
+                action = pending["action"]
+                target = pending["target"]
+                
+                await self._broadcast_info("ADMIN", f"Action '{action}' approved [ID: {action_id}]. Initiating active defense protocols on {target}...")
+                
+                if action == "quarantine":
+                    from utils.firewall_service import FirewallService
+                    success = FirewallService.block_ip(target)
+                    if success:
+                        await self._broadcast_info("ADMIN", f"[{target}] successfully blackholed at OS layer via pfctl/iptables.")
+                    else:
+                        await self._broadcast_info("ERROR", f"Failed to execute kernel block on {target}.")
+                
             else:
                 await self._broadcast_info("ERROR", f"Invalid or expired action ID: {action_id}")
                 

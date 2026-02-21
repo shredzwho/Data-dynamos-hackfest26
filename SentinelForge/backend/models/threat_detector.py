@@ -60,22 +60,45 @@ class ThreatDetector:
 
     def process_packet_analysis(self, packets: List[Dict[str, Any]], threshold_override: float = 0.8) -> List[Dict[str, Any]]:
         """
-        Analyze a list of network packets.
+        Analyze a list of network packets using PyTorch Feed-Forward Deep Learning.
         """
+        from utils.geoip_service import GeoIPService
+        
         results = []
         for packet in packets:
-            # We map some packet fields to a normalized numeric feature array
-            # Feature 1: size normalized roughly by 1500 (MTU)
-            # Features 2-5: mock encoded protocol and IP heuristics
+            # 1. Normalized Size (MTU 1500 limit)
+            size_norm = min(packet.get("size", 0) / 1500.0, 1.0)
+            
+            # 2. Protocol Encoding
+            proto_val = 0.0
+            proto = packet.get("protocol")
+            if proto == "TCP": proto_val = 1.0
+            elif proto == "UDP": proto_val = 0.5
+            elif proto == "ICMP": proto_val = 0.2
+            
+            # 3. Port Risk Factor
+            port = packet.get("port", 0)
+            high_risk_ports = [21, 22, 23, 139, 445, 3389, 8023]
+            port_risk = 1.0 if port in high_risk_ports else 0.1
+            
+            # 4. Geo Risk Factor
+            country_code = packet.get("geo", "UNKNOWN")
+            geo_risk = GeoIPService.get_geo_risk_factor(country_code)
+            
+            # 5. Generic Jitter / Timing Anomaly (Simulated baseline for MVP)
+            timing_risk = 0.2
+            
+            # Assemble the tensor array (5 Features)
             features = np.array([
-                packet.get("size", 0) / 1500.0,
-                1.0 if packet.get("protocol") == "TCP" else 0.5,
-                np.random.rand(),
-                np.random.rand(),
-                np.random.rand()
+                size_norm, 
+                proto_val, 
+                port_risk, 
+                geo_risk, 
+                timing_risk
             ], dtype=np.float32)
             
             tensor_input = torch.tensor(features).unsqueeze(0)
+            
             with torch.no_grad():
                 threat_prob = self.model(tensor_input).item()
 

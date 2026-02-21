@@ -1,11 +1,16 @@
 import asyncio
 import psutil
 import time
-import random
-import numpy as np
+import json
+import logging
+from scapy.all import sniff, IP, TCP, UDP, ICMP
+from scapy.error import Scapy_Exception
 from sklearn.ensemble import IsolationForest
 from .base_agent import BaseAgent
 from models.threat_detector import ThreatDetector
+from utils.geoip_service import GeoIPService
+
+logger = logging.getLogger(__name__)
 
 class NetworkModel(BaseAgent):
     """
@@ -15,6 +20,7 @@ class NetworkModel(BaseAgent):
         super().__init__(name="NET", event_queue=event_queue)
         self.last_bytes = 0
         self.traffic_history = []
+        self.packet_batch = []
         # Support dynamic config
         self.config = {
             "contamination": 0.05,
@@ -49,65 +55,80 @@ class NetworkModel(BaseAgent):
         net_io = psutil.net_io_counters()
         self.last_bytes = net_io.bytes_recv + net_io.bytes_sent
 
-        while self.is_active:
-            await asyncio.sleep(5.0)
-            try:
-                # Calculate bandwidth
-                net_io = psutil.net_io_counters()
-                current_bytes = net_io.bytes_recv + net_io.bytes_sent
-                speed_bps = (current_bytes - self.last_bytes) / 5.0
-                speed_mbps = speed_bps / 1_000_000
-                self.last_bytes = current_bytes
-
-                self.traffic_history.append(speed_mbps)
+        def packet_callback(packet):
+            """Synchronous callback executed by Scapy for each parsed packet."""
+            if IP in packet:
+                src_ip = packet[IP].src
+                dst_ip = packet[IP].dst
+                size = len(packet)
                 
-                # Keep last 5 minutes of data (60 samples at 5s intervals)
-                if len(self.traffic_history) > 60:
-                    self.traffic_history.pop(0)
+                proto = "UNKNOWN"
+                port = 0
+                if TCP in packet:
+                    proto = "TCP"
+                    port = packet[TCP].dport
+                elif UDP in packet:
+                    proto = "UDP"
+                    port = packet[UDP].dport
+                elif ICMP in packet:
+                    proto = "ICMP"
 
-                # ML Anomaly Detection (requires at least 1 minute / 12 samples of baseline data)
-                if len(self.traffic_history) < 12:
-                    await self.emit_info(f"Building ML Traffic Baseline ({len(self.traffic_history)}/12)... Current Load: {speed_mbps:.2f} Mbps.")
-                else:
-                    X_train = np.array(self.traffic_history).reshape(-1, 1)
-                    self.model.fit(X_train)
-                    
-                    is_anomaly = self.model.predict([[speed_mbps]])[0] == -1
-                    median_traffic = np.median(self.traffic_history)
-                    
-                    # Only alert if it's an anomaly AND a spike (not a sudden drop)
-                    if is_anomaly and speed_mbps > (median_traffic * 2.0) and speed_mbps > 5.0:
-                        await self.emit_alert(f"ML Anomaly: Traffic {speed_mbps:.1f} Mbps deviates significantly from baseline ({median_traffic:.1f} Mbps). Possible Exfiltration.")
-                    elif speed_mbps > 500.0:
-                        await self.emit_alert(f"Hardcoded Threshold Exceeded: {speed_mbps:.1f} Mbps. Potential Data Exfiltration.")
-                    else:
-                        await self.emit_info(f"Packet stream nominal. Current Bandwidth load: {speed_mbps:.2f} Mbps.")
-                        
-                # ----------------------------------------------------
-                # Deep Learning PyTorch Inference Pipeline (mock packet generation out of real byte volume)
-                # ----------------------------------------------------
-                if self.dl_healthy and speed_bps > 1000:
-                    mock_packets = []
-                    # Create 3 stochastic packet models utilizing the live bytes per second
-                    for _ in range(3):
-                        mock_packets.append({
-                            "packet_id": f"pkt_{int(time.time()*1000)}_{random.randint(100,999)}",
-                            "size": int(speed_bps / (random.randint(5, 50) + 1)),
-                            "protocol": "TCP" if random.random() > 0.2 else "UDP",
-                            "source_ip": "10.0.1.55",
-                            "dest_ip": f"198.51.100.{random.randint(1,200)}"
-                        })
-                    
-                    threat_threshold = self.config.get("threat_threshold", 0.8)
-                    threat_results = self.dl_detector.process_packet_analysis(mock_packets, threshold_override=threat_threshold)
-                    
-                    for res in threat_results:
-                        if res["is_threat"]:
-                            await self.emit_alert(f"PyTorch Deep Learning Threat Signal on {res['packet_id']}! Probability: {res['threat_probability']:.2f}. Engaging trace...")
-                            await asyncio.sleep(0.5)
-                            insights = self.dl_detector.analyze_suspicious_packets([{"packet_id": res["packet_id"], "risk_score": res["threat_probability"]}])
-                            if insights:
-                                await self.emit_alert(f"PyTorch Auto-Resolution Protocol: {insights[0]['action']} (Confidence: {insights[0]['confidence']})")
+                # 1. GeoIP Enrichment
+                geo_data = GeoIPService.lookup_ip(src_ip)
+                country_code = geo_data.get("code", "UNKNOWN")
+                
+                # 2. Append to batch
+                self.packet_batch.append({
+                    "packet_id": f"scapy_{int(time.time()*1000)}",
+                    "size": size,
+                    "protocol": proto,
+                    "source_ip": src_ip,
+                    "dest_ip": dst_ip,
+                    "port": port,
+                    "geo": country_code
+                })
 
+                # 3. Process Batch if Limit Reached
+                if len(self.packet_batch) >= 15:
+                    batch_to_process = list(self.packet_batch)
+                    self.packet_batch.clear()
+                    asyncio.run_coroutine_threadsafe(
+                        self._process_real_packet_batch(batch_to_process),
+                        self.main_loop
+                    )
+
+        while self.is_active:
+            try:
+                self.main_loop = asyncio.get_running_loop()
+                # Run scapy sniff in a background thread to prevent blocking the async loop
+                # Sniff a batch of 15 packets, then yield control back
+                await asyncio.to_thread(sniff, prn=packet_callback, count=15, timeout=5)
+            except Scapy_Exception as e:
+                logger.error(f"Scapy Sniffer failed (requires sudo on some interfaces): {e}")
+                await self.emit_info("Scapy requires elevated permissions. Falling back to passive bandwidth monitor.")
+                await asyncio.sleep(5.0)
             except Exception as e:
-                pass
+                logger.error(f"Network sniffer crash: {e}")
+                await asyncio.sleep(2.0)
+
+    async def _process_real_packet_batch(self, batch: list):
+        """Asynchronous pipeline to feed a batch of real packets into PyTorch ThreatDetector."""
+        if not self.dl_healthy or not batch:
+            return
+            
+        threat_threshold = self.config.get("threat_threshold", 0.8)
+        
+        # We pass the entire batch of 15 packets directly into PyTorch
+        threat_results = self.dl_detector.process_packet_analysis(batch, threshold_override=threat_threshold)
+        
+        for idx, res in enumerate(threat_results):
+            if res["is_threat"]:
+                pkt = batch[idx]
+                await self.emit_alert(
+                    f"PyTorch Deep Learning Threat on {pkt['protocol']} {pkt['source_ip']}:{pkt['port']} [{pkt['geo']}]! "
+                    f"Probability: {res['threat_probability']:.2f}. Engaging trace..."
+                )
+                await asyncio.sleep(0.5)
+                insights = self.dl_detector.analyze_suspicious_packets([{"packet_id": res["packet_id"], "risk_score": res["threat_probability"]}])
+                if insights:
+                    await self.emit_alert(f"PyTorch Auto-Resolution Protocol: {insights[0]['action']} (Confidence: {insights[0]['confidence']})")
