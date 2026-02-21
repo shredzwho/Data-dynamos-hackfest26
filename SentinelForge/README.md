@@ -4,34 +4,22 @@ SentinelForge is a next-generation, multi-modal **Autonomous Endpoint Detection 
 
 ![Premium Glassmorphism Demo](backend/SentinelForge-Vault/dashboard-demo-placeholder.webp)
 
-## Core Capabilities
+## Features
 
-SentinelForge is powered by a central **Agentic Manager** that utilizes the Actor Model pattern to distribute compute across 8 distinct, asynchronous forensic agents. 
+SentinelForge operates using a central **Agentic Manager** that distributes compute across specialized AI and heuristic forensic agents:
 
-### 1. Generative SOC Supervisor (LLM)
-Instead of relying purely on static regex or hardcoded Yara rules, SentinelForge uses a quantized **HuggingFaceTB/SmolLM-135M** Large Language Model running locally over PyTorch. The LLM acts as an autonomous Security Operations Center (SOC) analyst, ingesting raw data from the 7 sub-agents and determining malicious intent heuristically.
+*   **Generative SOC Supervisor**: A locally hosted HuggingFace SmolLM-135M Large Language Model that acts as an autonomous SOC analyst, ingesting raw data and determining malicious intent heuristically rather than relying on static rules.
+*   **Web Threat Detection**: Actively fetches global TOR exit-node IP lists and matches outbound traffic against known C2 infrastructure and Infostealer callback destinations.
+*   **Network Packet Inspection**: Uses raw POSIX sockets and K-Means clustering to sniff packets at the OS kernel level, detecting TCP SYN Floods, UDP Amplification attacks, and anomalous HTTP burst rates.
+*   **Memory Integrity Scanning**: Scans live RAM and process execution trees for fileless malware injections, reflective DLL side-loading, and zombie process hollowing techniques.
+*   **Live IAM Auditing**: A continuous UNIX tailer that monitors `/var/log/secure` and `auth.log` for failed SSH brute-forcing and unauthorized `sudo` privilege escalation attempts.
+*   **Deception Honeypots**: Spawns fake listener ports (e.g., SSH on 8023, RDP on 3389) to trap lateral-moving worms and automated `nmap` reconnaissance scanners.
+*   **Ransomware Canary Traps**: Instantly deploys hidden decoy files (`crypto_wallet.dat`, `passwords_backup.txt`) and uses the OS `watchdog` to monitor I/O events, immediately flagging Ransomware mass-encryption behavior.
+*   **Physical Hardware Defense (Anti-Rubber Ducky)**: Uses `pynput` to monitor global OS keystroke timing dynamics. It calculates Characters Per Second (CPS) to detect superhuman, hardware-injected BadUSB scripts (e.g., Flipper Zero payloads).
 
-### 2. Multi-Vector Threat Sub-Agents
-The platform actively hunts for threats across all layers of the OSI model using specialized Python daemons:
-*   **WebModel (Layer 7)**: Actively fetches global TOR exit-node IP lists and matches outbound traffic against known C2 infrastructure and Infostealer callback destinations.
-*   **NetworkModel (Layer 3/4)**: Uses raw POSIX sockets and `scapy` to sniff packets at the OS kernel level, utilizing a K-Means clustering algorithm to detect TCP SYN Floods, UDP Amplification attacks, and anomalous HTTP burst rates (DDoS).
-*   **MemoryModel (Ring 0/3)**: Scans live RAM and process execution trees for fileless malware injections, reflective DLL side-loading, and zombie process hollowing techniques.
-*   **LogModel (IAM Auditing)**: Acts as a continuous UNIX tailer using `aiofiles`. It monitors `/var/log/secure` and `/var/log/auth.log` for failed SSH brute-forcing and unauthorized `sudo` privilege escalation attempts, piping the strings to the local LLM for sentiment analysis.
-*   **HoneypotAgent (Deception)**: Spawns fake listener ports (e.g., SSH on 8023, RDP on 3389) to trap lateral-moving worms and automated `nmap` reconnaissance scanners.
+## How to Use
 
-### 3. Physical & Ransomware Defense
-*   **IntegrityModel (Canary Traps)**: Instantly deploys a hidden `SentinelForge-Vault` directory containing decoy files (`crypto_wallet.dat`, `passwords_backup.txt`). It uses the OS `watchdog` to monitor I/O events, immediately flagging Ransomware mass-encryption behavior.
-*   **KeystrokeModel (Anti-Rubber Ducky)**: Uses `pynput` to monitor global OS keystroke timing dynamics. It calculates the Characters Per Second (CPS) in a sliding window to detect superhuman, hardware-injected BadUSB scripts (e.g., Flipper Zero payloads).
-
-## Software Architecture
-
-*   **Frontend**: React (Next.js) with a custom Cinematic Cyber-Glassmorphism UI, Framer-Motion for 60fps animations, Recharts for realtime dashboard telemetry, and Socket.io-client.
-*   **Backend**: Python (FastAPI/Uvicorn) with full Native Asynchronous I/O handling, PyTorch for Machine Learning, and Socket.io for duplex data pushing.
-*   **Database**: SQLite with SQLAlchemy ORM (alembic configurations).
-
-## Installation & Quickstart
-
-Using the unified startup script, you can boot both the FastAPI backend and Next.js frontend concurrently.
+Using the unified startup script, you can boot both the FastAPI backend and Next.js frontend concurrently to rapidly launch the platform.
 
 1.  **Clone the Repository**
     ```bash
@@ -62,41 +50,18 @@ Using the unified startup script, you can boot both the FastAPI backend and Next
     ```
     This script will automatically clear zombie ports, boot the AI Engine to `http://localhost:8000`, construct the Ransomware traps, and launch the React Intelligence Dashboard to `http://localhost:3000`.
 
-## Interactive Dashboard Usage
+### Interaction & Testing Guide
+*   **Target Isolation**: Click on any Node tile in the dashboard grid. Click **"ISOLATE HOST"** to block all simulated subnet traffic, or **"AUTONOMOUS RESOLUTION"** to let the AI try to clean it.
+*   **Run a Security Audit**: Click the **"Run Deep Audit"** shield button on the right-side panel to sequentially wake up agents for a manual forensic OS sweep.
+*   **Simulate Ransomware**: Run `echo "hackfest_ransomware_payload" >> backend/SentinelForge-Vault/crypto_wallet.dat` in a terminal to trigger the file integrity AI.
+*   **Simulate BadUSB**: Mash your keyboard as fast as humanly possible for 3 seconds in any text application to trigger the keystroke physical defense anomaly.
 
-*   **Real-time Telemetry**: The top KPI row provides live sparkline visual tracking for CPU Load, Network I/O, Monitored Endpoints, and Active Threats.
-*   **Active Workstation Grid**: Displays all connected servers and workstations. Healthy nodes glow Green. If compromised, the node card will fracture, pulse Red, and isolate itself.
-*   **Target Isolation**: Clicking any node tile brings up an action panel. You can manually fire an Isolation hook to disconnect the backend subnet, or trigger the SOC AI to attempt an autonomous resolution.
-*   **Granular Agent Control**: The right sidebar allows the IT Admin to hot-swap the internal Threat Agents. If CPU load is spiking, you can disable the heavy `MemoryModel` engine while keeping `NetworkModel` online without rebooting the server.
-*   **Generative Reporting**: You can run Deep, Stealth, or Smart Sweeps. Following an audit, the backend generates an interactive Threat Report and outputs it directly as a downloadable `.xlsx` Excel spreadsheet.
+## Uses
 
-## Hackfest Demonstration Guide (Operating the Platform)
+SentinelForge is built for a variety of critical, real-world cybersecurity applications:
 
-Once `./run.sh` is active and the dashboard is open at `http://localhost:3000`, follow these steps to demonstrate SentinelForge's Active Defense capabilities to the judges:
-
-### 1. Simulating a Ransomware Attack (File Integrity Monitoring)
-SentinelForge automatically deploys a hidden decoy folder called `SentinelForge-Vault` inside the `backend/` directory upon boot. 
-To demonstrate the **IntegrityModel**, open a new terminal window and intentionally "encrypt" (modify) a decoy file:
-```bash
-cd backend
-echo "hackfest_ransomware_payload" >> SentinelForge-Vault/crypto_wallet.dat
-```
-*   **Expected Result**: The React Dashboard will immediately flash a massive `[RANSOMWARE THREAT]` alert in the Terminal Stream, and the active threat counter will increase.
-
-### 2. Simulating a BadUSB / Rubber Ducky Attack (Physical Security)
-The **KeystrokeModel** is continuously monitoring global typing speed using `pynput`. 
-1. Keep the `http://localhost:3000` dashboard visible.
-2. Open any text application (Notepad, Terminal, Browser URL bar).
-3. **Mash your keyboard as fast as humanly possible for 3 seconds** (or use an AppleScript to paste text rapidly).
-*   **Expected Result**: If typing exceeds 50 Characters Per Second (CPS), the HUD will intercept the hardware anomaly and fire an `[INJECTION_THREAT]` warning to the dashboard, preventing superhuman automated scripts from executing blindly.
-
-### 3. Interacting with the EDR Dashboard
-*   **Target Isolation**: Click on any of the `WS-ENT-XX` Node tiles in the main grid. A modal will pop up. Click **"ISOLATE HOST"**. The node will instantly turn RED and block all simulated subnet traffic.
-*   **Autonomous Resolution**: In the same modal, click **"AUTONOMOUS RESOLUTION"**. The state will bounce until the simulated Generative SOC engine "cleans" the node, returning it to green.
-*   **Run a Security Audit**: Click the massive **"Run Deep Audit"** shield button on the right-side panel. Watch the "Agentic Stream Output" terminal as it sequentially wakes up the `LOG`, `MEM`, and `WEB` agents to perform a manual forensic sweep of the OS.
-
-### 4. Viewing Generative SOC Logs
-If you want to read the raw thoughts of the local AI Supervisor (SmolLM-135M), watch the unified `./run.sh` terminal output. Whenever an incident occurs, the LLM will output its Threat Sentiment Analysis directly into the console.
-
-## License
-Created internally for Hackfest. All Rights Reserved.
+*   **Enterprise EDR**: Active endpoint defense against lateral movement, fileless malware, and credential dumping.
+*   **Zero-Trust Networking**: Continuous verification of running processes and immediate network isolation of compromised or infected nodes.
+*   **Automated Incident Response**: Reducing SOC analyst fatigue by automatically quarantining threats and writing autonomous mitigation action reports.
+*   **Ransomware Mitigation**: Early warning detection of mass-file encryption to stop Ransomware sweeps before they lock critical volumes.
+*   **Physical Breach Prevention**: Protecting workstations from malicious USB drops and automated hardware injection attacks in insecure physical environments.
