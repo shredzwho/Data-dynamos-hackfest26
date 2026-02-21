@@ -178,6 +178,30 @@ export default function ProfessionalDashboard() {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
+  // Phase 23: Doomsday Protocol — auto-detect mass infection and hard reset
+  useEffect(() => {
+    if (nodes.length === 0) return;
+    const infectedCount = nodes.filter(n => n.isInfected).length;
+    const infectionRate = infectedCount / nodes.length;
+
+    if (infectionRate >= 0.8) {
+      addLog("DOOMSDAY", `⚠ CRITICAL: ${infectedCount}/${nodes.length} endpoints compromised (${Math.round(infectionRate * 100)}%). Initiating Doomsday Protocol — HARD RESET on all systems.`, "error");
+
+      // Hard reset every node
+      setNodes(prev => prev.map(n => ({ ...n, isInfected: false, isResolving: false })));
+      setActiveThreats(0);
+
+      // Notify backend to mass-quarantine
+      if (socket) {
+        nodes.filter(n => n.isInfected).forEach(n => {
+          socket.emit("trigger_audit", { scanType: "deep", nodeId: n.id });
+        });
+      }
+
+      addLog("DOOMSDAY", "Hard reset complete. All endpoints restored to nominal state. Recommend full forensic sweep.", "success");
+    }
+  }, [nodes]);
+
   const addLog = (source: string, message: string, type: "info" | "warn" | "error" | "success" = "info") => {
     const newLog: LogEntry = {
       id: Math.random().toString(36).substring(7),
