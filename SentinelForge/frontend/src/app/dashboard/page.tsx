@@ -681,10 +681,10 @@ export default function ProfessionalDashboard() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="bg-slate-900 border border-slate-700 shadow-2xl shadow-black/80 w-full max-w-5xl h-[700px] rounded-2xl flex flex-col overflow-hidden"
+              className="glass-panel w-full max-w-5xl max-h-[85vh] rounded-2xl flex flex-col overflow-hidden shadow-2xl shadow-black/80"
             >
               {/* Modal Header */}
-              <div className="px-8 py-5 border-b border-slate-800 flex justify-between items-center bg-slate-950/50">
+              <div className="px-8 py-5 border-b border-white/5 flex justify-between items-center bg-black/30 shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
                     <Search size={20} />
@@ -696,18 +696,18 @@ export default function ProfessionalDashboard() {
                 </div>
                 <button 
                   onClick={() => setSelectedNode(null)}
-                  className="p-2 text-slate-400 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
+                  className="p-2 text-slate-400 hover:bg-white/10 hover:text-white rounded-lg transition-colors"
                 >
                   <X size={24} />
                 </button>
               </div>
 
               {/* Modal Body */}
-              <div className="flex-1 grid grid-cols-1 lg:grid-cols-[300px_1fr] p-8 gap-8 min-h-0 bg-slate-900">
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-[320px_1fr] p-8 gap-8 min-h-0 overflow-hidden">
                 
-                {/* Specs Sidebar */}
-                <div className="flex flex-col gap-6">
-                  <div className="bg-slate-900 rounded-xl border border-slate-700 shadow-inner p-6 flex-1 relative overflow-hidden">
+                {/* Specs Sidebar - Scrollable */}
+                <div className="flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-2 min-h-0">
+                  <div className="glass-panel p-6 relative overflow-hidden shrink-0">
                     {selectedNode.isInfected && (
                       <div className="absolute inset-0 bg-rose-500/5 border-2 border-rose-500/50 animate-pulse rounded-xl pointer-events-none" />
                     )}
@@ -717,17 +717,17 @@ export default function ProfessionalDashboard() {
                     </h3>
 
                     <div className="space-y-4">
-                      <div className="pb-3 border-b border-slate-800">
+                      <div className="pb-3 border-b border-white/5">
                         <div className="text-xs text-slate-500 mb-1">IP Address</div>
-                        <div className="text-sm font-mono text-slate-200 bg-slate-950 px-3 py-2 rounded-md border border-slate-800">{selectedNode.ip}</div>
+                        <div className="text-sm font-mono text-slate-200 bg-black/30 px-3 py-2 rounded-md border border-white/5">{selectedNode.ip}</div>
                       </div>
-                      <div className="pb-3 border-b border-slate-800">
+                      <div className="pb-3 border-b border-white/5">
                         <div className="text-xs text-slate-500 mb-1">MAC Address</div>
-                        <div className="text-sm font-mono text-slate-200 bg-slate-950 px-3 py-2 rounded-md border border-slate-800">{selectedNode.mac}</div>
+                        <div className="text-sm font-mono text-slate-200 bg-black/30 px-3 py-2 rounded-md border border-white/5">{selectedNode.mac}</div>
                       </div>
-                      <div className="pb-3 border-b border-slate-800">
+                      <div className="pb-3 border-b border-white/5">
                         <div className="text-xs text-slate-500 mb-1">Operating System</div>
-                        <div className="text-sm font-medium text-slate-200">{selectedNode.os}</div>
+                        <div className="text-sm font-mono text-slate-200 bg-black/30 px-3 py-2 rounded-md border border-white/5">{selectedNode.os}</div>
                       </div>
                       
                       <div className="pt-2">
@@ -735,8 +735,8 @@ export default function ProfessionalDashboard() {
                            <span className="text-xs text-slate-500">Memory Usage</span>
                            <span className="text-sm font-bold text-slate-200">{selectedNode.ram} GB</span>
                          </div>
-                         <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                           <div className="bg-blue-500 h-full rounded-full" style={{ width: `${(selectedNode.ram/16)*100}%` }} />
+                         <div className="w-full bg-black/30 h-2 rounded-full overflow-hidden">
+                           <div className="bg-blue-500 h-full rounded-full shadow-[0_0_8px_rgba(59,130,246,0.5)]" style={{ width: `${(selectedNode.ram/16)*100}%` }} />
                          </div>
                       </div>
                       
@@ -745,20 +745,20 @@ export default function ProfessionalDashboard() {
                            <span className="text-xs text-slate-500">CPU Load</span>
                            <span className="text-sm font-bold text-slate-200">{selectedNode.cpu}%</span>
                          </div>
-                         <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                           <div className={`h-full rounded-full ${selectedNode.cpu > 80 ? 'bg-rose-500' : 'bg-indigo-500'}`} style={{ width: `${selectedNode.cpu}%` }} />
+                         <div className="w-full bg-black/30 h-2 rounded-full overflow-hidden">
+                           <div className={`h-full rounded-full ${selectedNode.cpu > 80 ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]' : 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]'}`} style={{ width: `${selectedNode.cpu}%` }} />
                          </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Phase 13: Granular Model Toggling UI */}
-                  <div className="bg-slate-900 rounded-xl border border-slate-800 p-6 flex-1 relative overflow-hidden">
+                  <div className="glass-panel p-6 relative shrink-0">
                     <h3 className="text-sm font-semibold text-slate-200 mb-6 flex items-center gap-2">
                        <ShieldCheck size={16} className="text-emerald-500"/> Security Modules
                     </h3>
                     
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       {[
                         { id: 'NET', label: 'Network Analyzer', desc: 'Deep Packet Inspection' },
                         { id: 'MEM', label: 'Memory Scanner', desc: 'Kernel Ram Heuristics' },
@@ -769,7 +769,7 @@ export default function ProfessionalDashboard() {
                         const isActive = localNodeModels[model.id] ?? true;
                         
                         return (
-                          <div key={model.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-950/50 border border-slate-800/80">
+                          <div key={model.id} className="flex items-center justify-between p-3 rounded-lg bg-black/20 border border-white/5">
                             <div>
                                <div className="text-sm font-medium text-slate-200">{model.label}</div>
                                <div className="text-xs text-slate-500">{model.desc}</div>
@@ -777,7 +777,7 @@ export default function ProfessionalDashboard() {
                             <button
                               onClick={() => toggleNodeModel(model.id, isActive)}
                               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
-                                isActive ? 'bg-emerald-500' : 'bg-slate-700'
+                                isActive ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]' : 'bg-slate-700'
                               }`}
                             >
                               <span
@@ -792,63 +792,64 @@ export default function ProfessionalDashboard() {
                     </div>
                   </div>
 
+                  {/* Action Buttons - Always visible at bottom */}
                   {selectedNode.isInfected && (
-                    <div className="flex gap-4">
+                    <div className="flex gap-4 shrink-0">
                       <button 
                         onClick={handleIsolate}
                         disabled={selectedNode.isResolving}
-                        className="flex-1 py-4 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all text-sm font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-1 py-4 bg-black/30 hover:bg-white/5 text-slate-300 border border-white/10 transition-all text-sm font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur"
                       >
-                        <ShieldAlert size={18} /> Isolate (Manual)
+                        <ShieldAlert size={18} /> Isolate Host
                       </button>
                       <button 
                         onClick={handleResolve}
                         disabled={selectedNode.isResolving}
-                        className={`flex-1 py-4 text-white shadow-lg transition-all text-sm font-bold rounded-xl flex items-center justify-center gap-2 ${selectedNode.isResolving ? 'bg-indigo-600/50 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/25'}`}
+                        className={`flex-1 py-4 text-white shadow-lg transition-all text-sm font-bold rounded-xl flex items-center justify-center gap-2 ${selectedNode.isResolving ? 'bg-indigo-600/50 cursor-not-allowed' : 'bg-indigo-600/80 hover:bg-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.4)] border border-indigo-500/50'}`}
                       >
                         {selectedNode.isResolving ? (
                           <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Resolving...</>
                         ) : (
-                          <><CheckCircle2 size={18} /> Auto-Resolve Threat</>
+                          <><CheckCircle2 size={18} /> Auto-Resolve</>
                         )}
                       </button>
                     </div>
                   )}
                   {!selectedNode.isInfected && (
-                    <div className="w-full py-4 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-sm font-bold rounded-xl flex items-center justify-center gap-2">
+                    <div className="w-full py-4 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-sm font-bold rounded-xl flex items-center justify-center gap-2 shrink-0 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
                        <CheckCircle2 size={18} /> System Secure
                     </div>
                   )}
                 </div>
 
                 {/* Sub-Terminal Log */}
-                <div className="bg-[#0c0c14] border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-inner">
-                  <div className="px-6 py-3 border-b border-slate-800 flex items-center gap-2 bg-[#12121a]">
-                    <div className="w-2.5 h-2.5 rounded-full bg-slate-600" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-slate-600" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-slate-600" />
+                <div className="bg-black/40 border border-white/5 rounded-xl flex flex-col overflow-hidden shadow-inner backdrop-blur-sm">
+                  <div className="px-6 py-3 border-b border-white/5 flex items-center gap-2 bg-black/30 shrink-0">
+                    <div className="w-2.5 h-2.5 rounded-full bg-rose-500/60" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500/60" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/60" />
                     <span className="ml-4 text-xs font-mono text-slate-500">host@telemetry_stream ~</span>
                   </div>
-                  <div className="flex-1 p-6 font-mono text-sm space-y-3">
+                  <div className="flex-1 p-6 font-mono text-sm space-y-3 overflow-y-auto custom-scrollbar">
                     <div className="text-slate-400">
-                      <span className="text-indigo-400">INIT</span> Establishing secure RPC sidechannel to {selectedNode.ip}...
+                      <span className="text-indigo-400 font-bold">INIT</span> Establishing secure RPC sidechannel to {selectedNode.ip}...
                     </div>
                     <div className="text-emerald-400">
-                      <span className="text-indigo-400">NET</span> Port sweep negative. TCP stack nominal.
+                      <span className="text-indigo-400 font-bold">NET</span> Port sweep negative. TCP stack nominal.
                     </div>
                     <div className="text-emerald-400">
-                      <span className="text-indigo-400">MEM</span> Kernel RAM heuristics scanned. No fileless signatures found.
+                      <span className="text-indigo-400 font-bold">MEM</span> Kernel RAM heuristics scanned. No fileless signatures found.
                     </div>
                     <div className="text-slate-400">
-                      <span className="text-indigo-400">LOG</span> EVTX stream attached. Waiting for generic Audit trigger.
+                      <span className="text-indigo-400 font-bold">LOG</span> EVTX stream attached. Waiting for generic Audit trigger.
                     </div>
                     
                     {selectedNode.isInfected && (
                       <motion.div 
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                        className="text-rose-400 mt-6 !mt-8 p-3 border border-rose-500/30 bg-rose-500/10 rounded"
+                        className="text-rose-400 mt-6 p-4 border border-rose-500/30 bg-rose-500/10 rounded-lg shadow-[0_0_15px_rgba(244,63,94,0.15)]"
                       >
-                        <span className="font-bold">CRITICAL:</span> Anomalous payload detected in svchost.exe memory space. Recommend immediate isolation.
+                        <span className="font-bold">⚠ CRITICAL:</span> Anomalous payload detected in svchost.exe memory space. Recommend immediate isolation.
                       </motion.div>
                     )}
                     
