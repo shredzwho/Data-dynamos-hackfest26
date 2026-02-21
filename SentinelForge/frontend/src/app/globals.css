@@ -8,15 +8,8 @@
 }
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #020617; /* slate-950 */
-    --foreground: #f8fafc; /* slate-50 */
-  }
+  --background: #000000;
+  --foreground: #f8fafc;
 }
 
 body {
@@ -32,3 +25,113 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+
+/* -------------------------------------------------------------------------- */
+/* PHASE 22: PREMIUM CYBER-GLASSMORPHISM DESIGN TOKENS                        */
+/* -------------------------------------------------------------------------- */
+
+/* Cinematic Ambient Radial Gradient */
+.bg-ambient-glow {
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 85% 30%, rgba(236, 72, 153, 0.05) 0%, transparent 40%),
+    radial-gradient(circle at 50% 80%, rgba(56, 189, 248, 0.06) 0%, transparent 50%);
+  background-attachment: fixed;
+}
+
+/* Premium Frosted Glass Panel */
+.glass-panel {
+  background: rgba(10, 10, 10, 0.4);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 
+    0 8px 32px 0 rgba(0, 0, 0, 0.6), 
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.glass-panel-interactive {
+  transition: all 0.3s ease;
+}
+
+.glass-panel-interactive:hover {
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 
+    0 8px 32px 0 rgba(0, 0, 0, 0.6), 
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 20px rgba(99, 102, 241, 0.15);
+  background: rgba(15, 15, 15, 0.5);
+}
+
+/* Typography Glows */
+.text-glow-blue {
+  text-shadow: 0 0 10px rgba(99, 102, 241, 0.5), 0 0 20px rgba(99, 102, 241, 0.2);
+}
+
+.text-glow-red {
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.6), 0 0 20px rgba(239, 68, 68, 0.3);
+}
+
+.text-glow-green {
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.5), 0 0 20px rgba(34, 197, 94, 0.2);
+}
+
+/* Node Grid Status Animations */
+@keyframes borderPulseRed {
+  0% { border-color: rgba(239, 68, 68, 0.2); box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+  100% { border-color: rgba(239, 68, 68, 0.8); box-shadow: 0 0 20px rgba(239, 68, 68, 0.2), inset 0 0 10px rgba(239, 68, 68, 0.1); }
+}
+
+@keyframes borderPulseGreen {
+  0% { border-color: rgba(34, 197, 94, 0.1); box-shadow: 0 0 0 rgba(34, 197, 94, 0); }
+  100% { border-color: rgba(34, 197, 94, 0.4); box-shadow: 0 0 15px rgba(34, 197, 94, 0.1); }
+}
+
+.node-pulse-red {
+  animation: borderPulseRed 1.5s infinite alternate ease-in-out;
+}
+
+.node-pulse-green {
+  animation: borderPulseGreen 3s infinite alternate ease-in-out;
+}
+
+/* HUD Cinematic Scanline Overlay */
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.crt-overlay::before {
+  content: " ";
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%);
+  z-index: 50;
+  background-size: 100% 2px;
+  pointer-events: none;
+  opacity: 0.2;
+}
+
+.scanner-line {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.8), transparent);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+  animation: scanline 8s linear infinite;
+  opacity: 0.3;
+  z-index: 49;
+  pointer-events: none;
+}
+
+/* Recharts Customization */
+.recharts-cartesian-axis-line,
+.recharts-cartesian-axis-tick-line {
+  display: none;
+}

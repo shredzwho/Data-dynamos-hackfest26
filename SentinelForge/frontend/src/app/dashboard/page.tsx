@@ -423,38 +423,47 @@ export default function ProfessionalDashboard() {
         <div className="flex flex-col gap-8 min-h-0">
           
           {/* KPI Stat Cards with Realtime Sparkline Graphs */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 shrink-0">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 shrink-0 z-10">
             {[
-              { title: "Monitored Endpoints", value: nodes.length, icon: Server, color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20", data: nodesHistory, fill: "#3b82f6" },
-              { title: "Avg Network Traffic", value: `${netTraffic} Mbps`, icon: Activity, color: "text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-500/20", data: netHistory, fill: "#6366f1" },
-              { title: "Avg CPU Load", value: `${cpuLoad}%`, icon: Cpu, color: "text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/20", data: cpuHistory, fill: "#8b5cf6" },
-              { title: "Active Security Threats", value: activeThreats, icon: AlertTriangle, color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/30", isDanger: activeThreats > 0, data: threatHistory, fill: "#f43f5e" }
+              { title: "Monitored Endpoints", value: nodes.length, icon: Server, color: "text-blue-400", bg: "bg-blue-500/10", data: nodesHistory, fill: "#3b82f6" },
+              { title: "Avg Network Traffic", value: `${netTraffic} Mbps`, icon: Activity, color: "text-indigo-400", bg: "bg-indigo-500/10", data: netHistory, fill: "#6366f1" },
+              { title: "Avg CPU Load", value: `${cpuLoad}%`, icon: Cpu, color: "text-violet-400", bg: "bg-violet-500/10", data: cpuHistory, fill: "#8b5cf6" },
+              { title: "Active Security Threats", value: activeThreats, icon: AlertTriangle, color: "text-rose-400", bg: "bg-rose-500/10", isDanger: activeThreats > 0, data: threatHistory, fill: "#f43f5e" }
             ].map((stat, i) => (
-              <div key={i} className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col relative overflow-hidden transition-colors h-[150px] ${stat.isDanger ? 'bg-rose-950/20 border-rose-900/50 shadow-[0_4px_30px_rgba(225,29,72,0.15)]' : ''}`}>
+              <div key={i} className={`glass-panel p-6 flex flex-col relative overflow-hidden transition-colors h-[150px] ${stat.isDanger ? 'border-pulse-red bg-rose-950/20' : ''}`}>
                 
+                {/* Background Glow Injector */}
+                <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl opacity-20 ${stat.bg}`}></div>
+
                 {/* Background Recharts Area */}
-                <div className="absolute inset-0 top-14 opacity-30 pointer-events-none">
+                <div className="absolute inset-0 top-14 opacity-50 pointer-events-none drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={stat.data}>
                       <Area 
                         type="monotone" 
                         dataKey="val" 
                         stroke={stat.fill} 
-                        fill={stat.fill} 
-                        strokeWidth={2}
+                        fill={`url(#gradient-${i})`} 
+                        strokeWidth={3}
                         isAnimationActive={false} 
                       />
+                      <defs>
+                        <linearGradient id={`gradient-${i}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={stat.fill} stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor={stat.fill} stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
 
                 <div className="flex justify-between items-start mb-2 relative z-10">
-                  <span className="text-sm font-medium text-slate-400 drop-shadow-md">{stat.title}</span>
-                  <div className={`p-2 rounded-lg ${stat.bg} ${stat.color} shadow-lg backdrop-blur-sm`}>
+                  <span className="text-sm font-medium text-slate-300 tracking-wider font-mono">{stat.title}</span>
+                  <div className={`p-2 rounded-lg ${stat.bg} ${stat.color} shadow-lg backdrop-blur-sm ring-1 ring-white/10`}>
                     <stat.icon size={18} />
                   </div>
                 </div>
-                <div className={`text-3xl font-bold font-sans tracking-tight mt-auto relative z-10 drop-shadow-lg ${stat.isDanger ? 'text-rose-500' : 'text-slate-100'}`}>
+                <div className={`text-4xl font-bold font-sans tracking-tight mt-auto relative z-10 drop-shadow-lg ${stat.isDanger ? 'text-glow-red text-white' : 'text-glow-blue text-white'}`}>
                   {stat.value}
                 </div>
               </div>
@@ -462,11 +471,11 @@ export default function ProfessionalDashboard() {
           </div>
 
           {/* System Nodes Grid */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl flex flex-col p-6 flex-1 min-h-0 shrink-0">
+          <div className="glass-panel flex flex-col p-6 flex-1 min-h-0 shrink-0 z-10">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-base font-semibold text-slate-200 flex items-center gap-2">
                 <Network size={18} className="text-blue-400" />
-                Active Workstations
+                Active Workstation Grid
               </h2>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-5 overflow-y-auto custom-scrollbar pr-2 pb-2 min-h-0">
@@ -497,8 +506,8 @@ export default function ProfessionalDashboard() {
           </div>
 
           {/* Event Stream Terminal */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl flex flex-col flex-1 min-h-0 overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-950/30">
+          <div className="glass-panel flex flex-col flex-1 min-h-0 overflow-hidden mt-6">
+            <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-black/20">
               <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
                 <Terminal size={18} className="text-slate-400" />
                 Agentic Stream Output
@@ -534,7 +543,7 @@ export default function ProfessionalDashboard() {
             </div>
             
             {/* Interactive CLI Input */}
-            <div className="px-6 py-4 bg-slate-950/80 border-t border-slate-800 flex items-center gap-3 shrink-0 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all">
+            <div className="px-6 py-4 bg-black/40 border-t border-white/5 flex items-center gap-3 shrink-0 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all">
                <span className="text-emerald-400 font-mono font-bold text-sm">{">"}</span>
                <input 
                   type="text" 
@@ -553,8 +562,8 @@ export default function ProfessionalDashboard() {
         <div className="flex flex-col gap-8 min-h-0">
           
           {/* Security Audit Score */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 flex flex-col items-center justify-center relative overflow-hidden shrink-0">
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 pointer-events-none" />
+          <div className="glass-panel p-8 flex flex-col items-center justify-center relative overflow-hidden shrink-0 mt-[1.5rem]">
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-indigo-500/5 pointer-events-none" />
             
             <h3 className="text-sm font-medium text-slate-400 uppercase tracking-widest mb-6 w-full text-center">
               Security Compliance
@@ -562,12 +571,12 @@ export default function ProfessionalDashboard() {
             
             <div className="relative flex items-center justify-center mb-8">
               {/* Fake circular gauge background */}
-              <svg className="w-40 h-40 transform -rotate-90">
-                <circle cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-slate-800" />
+              <svg className="w-40 h-40 transform -rotate-90 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                <circle cx="80" cy="80" r="70" stroke="rgba(255,255,255,0.05)" strokeWidth="8" fill="transparent" />
                 <motion.circle 
                   initial={{ strokeDashoffset: 440 }}
                   animate={{ strokeDashoffset: 440 - (440 * auditScore) / 100 }}
-                  transition={{ duration: 1.5, ease: "easeOut" }}
+                  transition={{ duration: 2, ease: "easeOut" }}
                   cx="80" cy="80" r="70" stroke="currentColor" strokeWidth="8" fill="transparent" 
                   strokeDasharray="440"
                   strokeLinecap="round"
@@ -582,29 +591,29 @@ export default function ProfessionalDashboard() {
             </div>
 
             <div className="w-full flex flex-col gap-3">
-              <div className="flex bg-slate-800/50 p-1 rounded-lg border border-slate-700/50 mt-2">
+              <div className="flex bg-black/30 p-1 rounded-lg border border-white/5 mt-2">
                  <button 
                     onClick={() => setScanMode("deep")}
-                    className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${scanMode === "deep" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
+                    className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${scanMode === "deep" ? "bg-indigo-500/80 text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]" : "text-slate-400 hover:text-slate-200"}`}
                  >
                     DEEP
                  </button>
                  <button 
                     onClick={() => setScanMode("stealth")}
-                    className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${scanMode === "stealth" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
+                    className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${scanMode === "stealth" ? "bg-indigo-500/80 text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]" : "text-slate-400 hover:text-slate-200"}`}
                  >
                     STEALTH
                  </button>
                  <button 
                     onClick={() => setScanMode("smart")}
-                    className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${scanMode === "smart" ? "bg-indigo-600 text-white shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
+                    className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${scanMode === "smart" ? "bg-indigo-500/80 text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]" : "text-slate-400 hover:text-slate-200"}`}
                  >
                     SMART
                  </button>
               </div>
               <button 
                 onClick={triggerAudit}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/25 transition-all font-medium rounded-xl flex items-center justify-center gap-2 active:scale-95"
+                className="w-full py-3.5 bg-indigo-600/80 backdrop-blur hover:bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all font-medium rounded-xl flex items-center justify-center gap-2 active:scale-95 border border-indigo-500/50"
               >
                 <ShieldAlert size={18} />
                 Run {scanMode.charAt(0).toUpperCase() + scanMode.slice(1)} Audit
@@ -618,7 +627,7 @@ export default function ProfessionalDashboard() {
           </div>
 
           {/* AI Models Status */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex-1 flex flex-col overflow-hidden">
+          <div className="glass-panel p-6 flex-1 flex flex-col overflow-hidden">
             <h3 className="text-sm font-semibold text-slate-200 mb-6 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <Cpu size={18} className="text-indigo-400" />
