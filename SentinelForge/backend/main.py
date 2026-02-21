@@ -126,6 +126,10 @@ async def startup_event():
     task = asyncio.create_task(agentic_manager.start())
     global_bg_tasks.add(task)
     task.add_done_callback(global_bg_tasks.discard)
+    
+    # Auto-Triger the FIM and KEYS agents to run continuously
+    asyncio.create_task(agentic_manager.trigger_manual_audit("FIM"))
+    asyncio.create_task(agentic_manager.trigger_manual_audit("KEYS"))
 
 @app.on_event("shutdown")
 async def shutdown_event():

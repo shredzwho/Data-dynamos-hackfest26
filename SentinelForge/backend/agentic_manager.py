@@ -2,6 +2,7 @@ import asyncio
 import logging
 import psutil
 import time
+import os
 from typing import Dict, Any
 
 import importlib
@@ -103,7 +104,18 @@ class AgenticManager:
             self.bg_tasks.add(task)
             task.add_done_callback(self.bg_tasks.discard)
             
-            await self._broadcast_info("MGR", "Agentic Manager online. Sub-models initialized via Watchdog.")
+            # PHASE 21: Force Ransomware Canary Deployment
+            vault_dir = os.path.join(os.getcwd(), "SentinelForge-Vault")
+            if not os.path.exists(vault_dir):
+                os.makedirs(vault_dir, exist_ok=True)
+            for bait in ["passwords_backup.txt", "crypto_wallet.dat", "tax_returns_2025.pdf"]:
+                filepath = os.path.join(vault_dir, bait)
+                if not os.path.exists(filepath):
+                    with open(filepath, "w") as f:
+                        f.write("SentinelForge decoy payload. Do not modify.\n" * 10)
+            logger.info("Ransomware Canary Traps deployed successfully.")
+
+            await self._broadcast_info("MGR", "Agentic Manager online. Ransomware Traps & Sub-models initialized.")
         except Exception as e:
             logger.error(f"FATAL: AgenticManager failed to start! Exception: {e}")
 
@@ -214,6 +226,16 @@ class AgenticManager:
             # Standard pass-through to the injected SocketIO callback function
             await self.callback_func(event)
             self.event_queue.task_done()
+
+    async def trigger_manual_audit(self, agent_name: str):
+        """Pass-through to trigger an agent's run_manual_audit() immediately."""
+        agent = self.agents_map.get(agent_name)
+        if agent:
+            await self._broadcast_info("MGR", f"Manual Audit Request routing to {agent_name}...")
+            # We don't await this because run_manual_audit might block/loop
+            asyncio.create_task(agent.run_manual_audit())
+        else:
+            logger.error(f"Cannot trigger audit. Agent {agent_name} not found.")
 
     async def _emit_heartbeat(self):
         """Pushes live CPU, RAM, and Network speed KPIs every 2 seconds to the dashboard."""
