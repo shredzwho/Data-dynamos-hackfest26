@@ -70,5 +70,33 @@ Using the unified startup script, you can boot both the FastAPI backend and Next
 *   **Granular Agent Control**: The right sidebar allows the IT Admin to hot-swap the internal Threat Agents. If CPU load is spiking, you can disable the heavy `MemoryModel` engine while keeping `NetworkModel` online without rebooting the server.
 *   **Generative Reporting**: You can run Deep, Stealth, or Smart Sweeps. Following an audit, the backend generates an interactive Threat Report and outputs it directly as a downloadable `.xlsx` Excel spreadsheet.
 
+## Hackfest Demonstration Guide (Operating the Platform)
+
+Once `./run.sh` is active and the dashboard is open at `http://localhost:3000`, follow these steps to demonstrate SentinelForge's Active Defense capabilities to the judges:
+
+### 1. Simulating a Ransomware Attack (File Integrity Monitoring)
+SentinelForge automatically deploys a hidden decoy folder called `SentinelForge-Vault` inside the `backend/` directory upon boot. 
+To demonstrate the **IntegrityModel**, open a new terminal window and intentionally "encrypt" (modify) a decoy file:
+```bash
+cd backend
+echo "hackfest_ransomware_payload" >> SentinelForge-Vault/crypto_wallet.dat
+```
+*   **Expected Result**: The React Dashboard will immediately flash a massive `[RANSOMWARE THREAT]` alert in the Terminal Stream, and the active threat counter will increase.
+
+### 2. Simulating a BadUSB / Rubber Ducky Attack (Physical Security)
+The **KeystrokeModel** is continuously monitoring global typing speed using `pynput`. 
+1. Keep the `http://localhost:3000` dashboard visible.
+2. Open any text application (Notepad, Terminal, Browser URL bar).
+3. **Mash your keyboard as fast as humanly possible for 3 seconds** (or use an AppleScript to paste text rapidly).
+*   **Expected Result**: If typing exceeds 50 Characters Per Second (CPS), the HUD will intercept the hardware anomaly and fire an `[INJECTION_THREAT]` warning to the dashboard, preventing superhuman automated scripts from executing blindly.
+
+### 3. Interacting with the EDR Dashboard
+*   **Target Isolation**: Click on any of the `WS-ENT-XX` Node tiles in the main grid. A modal will pop up. Click **"ISOLATE HOST"**. The node will instantly turn RED and block all simulated subnet traffic.
+*   **Autonomous Resolution**: In the same modal, click **"AUTONOMOUS RESOLUTION"**. The state will bounce until the simulated Generative SOC engine "cleans" the node, returning it to green.
+*   **Run a Security Audit**: Click the massive **"Run Deep Audit"** shield button on the right-side panel. Watch the "Agentic Stream Output" terminal as it sequentially wakes up the `LOG`, `MEM`, and `WEB` agents to perform a manual forensic sweep of the OS.
+
+### 4. Viewing Generative SOC Logs
+If you want to read the raw thoughts of the local AI Supervisor (SmolLM-135M), watch the unified `./run.sh` terminal output. Whenever an incident occurs, the LLM will output its Threat Sentiment Analysis directly into the console.
+
 ## License
 Created internally for Hackfest. All Rights Reserved.
