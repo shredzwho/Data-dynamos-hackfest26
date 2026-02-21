@@ -196,6 +196,14 @@ export default function ProfessionalDashboard() {
         nodes.filter(n => n.isInfected).forEach(n => {
           socket.emit("trigger_audit", { scanType: "deep", nodeId: n.id });
         });
+
+        // Force reconnect the socket so backend data stream resumes
+        addLog("DOOMSDAY", "Reconnecting to backend telemetry stream...", "warn");
+        socket.disconnect();
+        setTimeout(() => {
+          socket.connect();
+          addLog("DOOMSDAY", "Backend connection re-established. Data stream active.", "success");
+        }, 2000);
       }
 
       addLog("DOOMSDAY", "Hard reset complete. All endpoints restored to nominal state. Recommend full forensic sweep.", "success");
