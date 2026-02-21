@@ -479,15 +479,16 @@ export default function ProfessionalDashboard() {
               </h2>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-5 overflow-y-auto custom-scrollbar pr-2 pb-2 min-h-0">
-              {nodes.map(node => (
+              {nodes.map((node, i) => (
                 <motion.div 
                   key={node.id}
                   whileHover={{ scale: 1.04, y: -4 }}
                   onClick={() => setSelectedNode(node)}
-                  className={`p-4 rounded-xl border cursor-pointer transition-all flex flex-col gap-2 ${
+                  style={{ animationDelay: `${i * 0.15}s` }}
+                  className={`p-4 rounded-xl border cursor-pointer transition-colors duration-300 flex flex-col gap-2 ${
                     node.isInfected 
-                      ? "bg-rose-950/30 border-rose-500/50 shadow-[0_4px_20px_rgba(225,29,72,0.15)]" 
-                      : "bg-slate-950/50 border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800/80 hover:shadow-lg hover:shadow-indigo-500/10"
+                      ? "node-pulse-red bg-rose-950/30" 
+                      : "node-pulse-green bg-slate-950/50 hover:bg-slate-900/80"
                   }`}
                 >
                   <div className="flex justify-between items-start">
