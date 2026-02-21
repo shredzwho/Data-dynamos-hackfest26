@@ -7,7 +7,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   ShieldAlert, Activity, Cpu, Network, Server, 
   Terminal, ShieldCheck, X, Search, CheckCircle2,
-  AlertTriangle, Clock, HardDrive, Sliders, Download
+  AlertTriangle, Clock, HardDrive, Sliders, Download,
+  Globe, Zap, Radio
 } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 
@@ -52,6 +53,12 @@ export default function ProfessionalDashboard() {
   const [pytorchThreshold, setPytorchThreshold] = useState(0.80);
   
   const [terminalInput, setTerminalInput] = useState("");
+
+  // Phase 25: Dashboard Enhancements
+  const [attackOrigins, setAttackOrigins] = useState<{code: string; count: number; x: number; y: number}[]>([]);
+  const [lastThreatTime, setLastThreatTime] = useState<Date | null>(null);
+  const logoClickRef = useRef(0);
+  const logoTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Historical data for Sparklines
   const [cpuHistory, setCpuHistory] = useState<{val: number}[]>(Array(20).fill({val: 0}));
@@ -120,6 +127,26 @@ export default function ProfessionalDashboard() {
           newNodes[randomIdx].isInfected = true;
           return newNodes;
         });
+        setLastThreatTime(new Date());
+
+        // Phase 25: Track attack geo-origins for the Threat Map
+        const geoMatch = (data.detail || "").match(/\[([A-Z]{2,})\]/);
+        if (geoMatch) {
+          const code = geoMatch[1];
+          setAttackOrigins(prev => {
+            const existing = prev.find(a => a.code === code);
+            if (existing) return prev.map(a => a.code === code ? { ...a, count: a.count + 1 } : a);
+            // Approximate map positions for common country codes
+            const geoPositions: Record<string, {x: number; y: number}> = {
+              US: {x: 20, y: 38}, CN: {x: 78, y: 35}, RU: {x: 65, y: 25}, IN: {x: 72, y: 42},
+              BR: {x: 30, y: 62}, DE: {x: 52, y: 30}, GB: {x: 48, y: 28}, FR: {x: 50, y: 32},
+              JP: {x: 85, y: 35}, KR: {x: 82, y: 35}, AU: {x: 85, y: 70}, IR: {x: 65, y: 38},
+              KP: {x: 81, y: 33}, UA: {x: 58, y: 30}, NG: {x: 52, y: 50}, UNKNOWN: {x: 50, y: 50}
+            };
+            const pos = geoPositions[code] || geoPositions.UNKNOWN;
+            return [...prev, { code, count: 1, x: pos.x, y: pos.y }].slice(-12);
+          });
+        }
         addLog(data.model || "Network", `Threat Detected: ${data.detail}`, "error");
       } else if (data.type === "AUDIT_RESULT") {
         setAuditScore(data.score);
@@ -415,7 +442,28 @@ export default function ProfessionalDashboard() {
       {/* Top Navigation Bar */}
       <header className="flex justify-between items-center mb-8 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center rounded-xl shadow-lg shadow-blue-500/20">
+          <div
+            className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center rounded-xl shadow-lg shadow-blue-500/20 cursor-pointer select-none active:scale-90 transition-transform"
+            title="Triple-click for Doomsday Protocol"
+            onClick={() => {
+              logoClickRef.current += 1;
+              if (logoTimerRef.current) clearTimeout(logoTimerRef.current);
+              if (logoClickRef.current >= 3) {
+                logoClickRef.current = 0;
+                // Manual Doomsday trigger for demo
+                addLog("DOOMSDAY", "⚠ MANUAL OVERRIDE: Doomsday Protocol engaged by Admin.", "error");
+                setNodes(prev => prev.map(n => ({ ...n, isInfected: false, isResolving: false })));
+                setActiveThreats(0);
+                if (socket) {
+                  socket.disconnect();
+                  setTimeout(() => { socket.connect(); }, 2000);
+                }
+                addLog("DOOMSDAY", "Hard reset complete. All systems nominal.", "success");
+              } else {
+                logoTimerRef.current = setTimeout(() => { logoClickRef.current = 0; }, 600);
+              }
+            }}
+          >
             <ShieldCheck size={24} className="text-white" />
           </div>
           <div>
@@ -433,16 +481,29 @@ export default function ProfessionalDashboard() {
           </button>
           
           <div className="h-4 w-px bg-slate-800" />
+
+          {/* Last Threat Timestamp */}
+          <div className="flex items-center gap-2 text-sm">
+            <Zap size={14} className={lastThreatTime ? "text-rose-400" : "text-slate-600"} />
+            <span className={`font-mono text-xs ${lastThreatTime ? "text-rose-400" : "text-slate-600"}`}>
+              {lastThreatTime ? `Last threat: ${Math.floor((Date.now() - lastThreatTime.getTime()) / 1000)}s ago` : "No threats"}
+            </span>
+          </div>
+
+          <div className="h-4 w-px bg-slate-800" />
           
           <div className="flex items-center gap-2 text-sm">
             <Clock size={16} className="text-slate-500" />
             <span className="font-mono">{uptime}</span>
           </div>
           <div className="h-4 w-px bg-slate-800" />
+
+          {/* Live Connection Status */}
           <div className="flex items-center gap-2 text-sm">
+            <Radio size={14} className={isConnected ? "text-emerald-400" : "text-rose-400"} />
             <div className={`w-2 h-2 rounded-full ${isConnected ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-rose-500 animate-pulse"}`} />
             <span className={isConnected ? "text-emerald-400 font-medium" : "text-rose-400 font-medium"}>
-              {isConnected ? "Connected" : "Disconnected"}
+              {isConnected ? "1 Analyst Online" : "Disconnected"}
             </span>
           </div>
         </div>
@@ -501,6 +562,42 @@ export default function ProfessionalDashboard() {
               </div>
             ))}
           </div>
+
+          {/* Phase 25: Threat Origin Map */}
+          {attackOrigins.length > 0 && (
+            <div className="glass-panel p-6 shrink-0 z-10">
+              <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2 mb-4">
+                <Globe size={16} className="text-rose-400" />
+                Threat Origin Map
+                <span className="text-xs text-slate-500 ml-auto font-mono">{attackOrigins.reduce((s, a) => s + a.count, 0)} attacks tracked</span>
+              </h2>
+              <div className="relative w-full h-32 bg-slate-950/50 rounded-lg border border-white/5 overflow-hidden">
+                {/* Simplified world grid lines */}
+                <svg className="absolute inset-0 w-full h-full opacity-10" viewBox="0 0 100 80">
+                  {[20, 40, 60].map(y => <line key={`h${y}`} x1="0" y1={y} x2="100" y2={y} stroke="#64748b" strokeWidth="0.3" />)}
+                  {[20, 40, 60, 80].map(x => <line key={`v${x}`} x1={x} y1="0" x2={x} y2="80" stroke="#64748b" strokeWidth="0.3" />)}
+                </svg>
+                {/* Attack origin dots */}
+                {attackOrigins.map((origin, i) => (
+                  <motion.div
+                    key={origin.code}
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="absolute"
+                    style={{ left: `${origin.x}%`, top: `${origin.y}%`, transform: "translate(-50%, -50%)" }}
+                  >
+                    <div className="relative group">
+                      <div className="w-3 h-3 bg-rose-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(244,63,94,0.8)]" />
+                      <div className="absolute -top-1 -left-1 w-5 h-5 border border-rose-500/40 rounded-full animate-ping" />
+                      <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] font-mono text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-black/80 px-1 rounded">
+                        {origin.code} ({origin.count})
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* System Nodes Grid */}
           <div className="glass-panel flex flex-col p-6 flex-1 min-h-0 shrink-0 z-10">
