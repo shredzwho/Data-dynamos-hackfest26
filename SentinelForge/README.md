@@ -17,6 +17,53 @@ SentinelForge operates using a central **Agentic Manager** that distributes comp
 *   **Ransomware Canary Traps**: Instantly deploys hidden decoy files (`crypto_wallet.dat`, `passwords_backup.txt`) and uses the OS `watchdog` to monitor I/O events, immediately flagging Ransomware mass-encryption behavior.
 *   **Physical Hardware Defense (Anti-Rubber Ducky)**: Uses `pynput` to monitor global OS keystroke timing dynamics. It calculates Characters Per Second (CPS) to detect superhuman, hardware-injected BadUSB scripts (e.g., Flipper Zero payloads).
 
+## Tech Stack
+
+### Web-based Admin Dashboard
+| Tool | Purpose |
+|------|---------|
+| **Next.js 14** (React 18) | Server-side rendered React framework |
+| **TypeScript** | Type-safe frontend logic |
+| **Framer Motion** | 60fps kinetic UI transitions and spring animations |
+| **Recharts** | Real-time sparkline area charts for KPI telemetry |
+| **Lucide React** | 20+ SVG icon components (ShieldAlert, Server, Cpu, etc.) |
+| **Tailwind CSS v4** | Utility-first CSS + custom Cyber-Glassmorphism design system |
+| **Socket.io-client** | Duplex real-time WebSocket data from backend |
+
+### Live System Monitoring & Security Engine
+| Tool | Purpose |
+|------|---------|
+| **FastAPI** (Uvicorn) | Async Python REST API + WebSocket server |
+| **python-socketio** | Real-time duplex event pushing to dashboard |
+| **psutil** | Live CPU%, Memory%, Network I/O, Process Trees |
+| **Scapy** | Raw POSIX kernel-level packet capture (Layer 3/4) |
+| **PyTorch** | Custom `ThreatDetector` neural network for packet classification |
+| **scikit-learn** | K-Means anomaly detection for DDoS burst patterns |
+| **HuggingFace Transformers** | `SmolLM-135M` local LLM for SOC threat correlation |
+| **FastEmbed / Sentence-Transformers** | Memory string embedding for fileless malware detection |
+| **Watchdog** | OS-level file I/O event monitoring (Ransomware Canary traps) |
+| **pynput** | Global keyboard CPS tracking (Anti-Rubber Ducky / BadUSB) |
+| **aiofiles** | Async UNIX auth log monitoring (`/var/log/auth.log`) |
+| **SQLite + SQLAlchemy** | Persistent threat history, node states, model configs |
+| **Pandas + openpyxl** | Auto-generated `.xlsx` Excel threat reports |
+
+### Login Authentication & Security
+| Tool | Purpose |
+|------|---------|
+| **PyJWT** | JWT token generation and validation |
+| **Passlib (bcrypt)** | Secure credential hashing |
+| **Python `cryptography`** | AES-GCM encrypted WebSocket payloads |
+| **Web Crypto API** | Client-side AES-GCM encryption (`window.crypto.subtle`) |
+| **SlowAPI** | API endpoint rate limiting and brute-force protection |
+
+### Clickable System Detail View & Response
+| Tool | Purpose |
+|------|---------|
+| **Framer Motion AnimatePresence** | Spring-animated detail modals per node |
+| **Custom REST APIs** | Per-node agent toggling (NET, MEM, LOG, WEB) |
+| **LLM-Driven Resolution** | Isolate Host / Auto-Resolve via SOC AI |
+| **Doomsday Protocol** | Auto-detect ≥80% mass infection → hard reset all systems |
+
 ## How to Use
 
 Using the unified startup script, you can boot both the FastAPI backend and Next.js frontend concurrently to rapidly launch the platform.
