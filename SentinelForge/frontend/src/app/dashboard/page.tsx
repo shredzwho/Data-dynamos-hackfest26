@@ -116,15 +116,14 @@ export default function ProfessionalDashboard() {
 
     newSocket.on("dashboard_events", (data: any) => {
       if (data.type === "THREAT") {
-        setActiveThreats(prev => {
-          const newVal = prev + 1;
-          setThreatHistory(h => [...h, {val: newVal}].slice(-20));
-          return newVal;
-        });
         setNodes(prev => {
           const newNodes = [...prev];
           const randomIdx = Math.floor(Math.random() * newNodes.length);
           newNodes[randomIdx].isInfected = true;
+          // Derive active threats from actual infected node count
+          const infectedCount = newNodes.filter(n => n.isInfected).length;
+          setActiveThreats(infectedCount);
+          setThreatHistory(h => [...h, {val: infectedCount}].slice(-20));
           return newNodes;
         });
         setLastThreatTime(new Date());
@@ -170,11 +169,12 @@ export default function ProfessionalDashboard() {
       } else if (data.type === "SUPERVISOR") {
         addLog(data.model || "SOC_LLM", `🔥 ${data.detail}`, "warn");
       } else if (data.type === "RESOLUTION_SUCCESS") {
-        setNodes(prev => prev.map(n => n.id === data.node_id ? { ...n, isInfected: false, isResolving: false } : n));
-        setActiveThreats(prev => {
-          const newVal = Math.max(0, prev - 1);
-          setThreatHistory(h => [...h, {val: newVal}].slice(-20));
-          return newVal;
+        setNodes(prev => {
+          const updated = prev.map(n => n.id === data.node_id ? { ...n, isInfected: false, isResolving: false } : n);
+          const infectedCount = updated.filter(n => n.isInfected).length;
+          setActiveThreats(infectedCount);
+          setThreatHistory(h => [...h, {val: infectedCount}].slice(-20));
+          return updated;
         });
         addLog("Admin", `Threat on ${data.node_id} was successfully resolved. Unit returned to Active Duty.`, "success");
         if (selectedNode?.id === data.node_id) {
