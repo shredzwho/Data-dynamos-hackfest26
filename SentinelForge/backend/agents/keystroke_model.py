@@ -73,7 +73,7 @@ class KeystrokeModel(BaseAgent):
         # Already launched via start()
         pass
 
-    def stop(self):
-        super().stop()
+    async def stop(self):
+        await super().stop()
         if self.listener:
             self.listener.stop()

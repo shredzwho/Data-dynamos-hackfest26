@@ -30,11 +30,16 @@ class WebModel(BaseAgent):
                     "https://check.torproject.org/torbulkexitlist",
                     headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
                 )
-                ctx = ssl.create_default_context()
-                ctx.check_hostname = False
-                ctx.verify_mode = ssl.CERT_NONE
-                with urllib.request.urlopen(req, timeout=10, context=ctx) as response:
-                    return response.read().decode('utf-8').splitlines()
+                try:
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        return response.read().decode('utf-8').splitlines()
+                except ssl.SSLError:
+                    # Fallback: disable verification only if system certs are missing
+                    ctx = ssl.create_default_context()
+                    ctx.check_hostname = False
+                    ctx.verify_mode = ssl.CERT_NONE
+                    with urllib.request.urlopen(req, timeout=10, context=ctx) as response:
+                        return response.read().decode('utf-8').splitlines()
             nodes = await asyncio.to_thread(fetch)
             self.tor_nodes = set(n.strip() for n in nodes if n.strip() and not n.startswith("#"))
             await self.emit_info(f"Loaded {len(self.tor_nodes)} Tor Exit Nodes into memory.")
@@ -84,7 +89,7 @@ class WebModel(BaseAgent):
                         if port not in self.whitelisted_ports:
                             try:
                                 proc_name = psutil.Process(c.pid).name() if c.pid else "Unknown"
-                            except:
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
                                 proc_name = "Unknown"
                             rogue_listens.append((port, proc_name))
                             
@@ -93,7 +98,7 @@ class WebModel(BaseAgent):
                         if c.raddr.ip in self.tor_nodes:
                             try:
                                 proc_name = psutil.Process(c.pid).name() if c.pid else "Unknown"
-                            except:
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
                                 proc_name = "Unknown"
                             tor_conns.append((c.raddr.ip, proc_name))
 

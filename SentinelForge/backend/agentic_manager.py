@@ -170,7 +170,7 @@ class AgenticManager:
                 if "[" in event.get("detail", "") and "]" in event.get("detail", ""):
                     try:
                         geo_tag = event.get("detail", "").split("[")[1].split("]")[0]
-                    except: pass
+                    except (IndexError, ValueError): pass
                     
                 self.threat_history.append({
                     "time": current_time, 

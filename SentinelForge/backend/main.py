@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import io
+import os
 from typing import Dict, Any
 from pydantic import BaseModel
 from fastapi import FastAPI, Depends, HTTPException, status
@@ -20,11 +21,46 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi import Request
+from contextlib import asynccontextmanager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="SentinelForge Secure Endpoint")
+# Forward-declared, initialized after AgenticManager setup below
+agentic_manager = None
+global_bg_tasks = set()
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    global agentic_manager
+    # --- STARTUP ---
+    Base.metadata.create_all(bind=engine)
+    
+    with SessionLocal() as db:
+        configs = db.query(db_models.ModelConfig).all()
+        agent_configs = {}
+        for c in configs:
+            if c.agent_name not in agent_configs:
+                agent_configs[c.agent_name] = {}
+            agent_configs[c.agent_name][c.parameter] = c.value
+        for agent_name, config_dict in agent_configs.items():
+            await agentic_manager.update_agent_config(agent_name, config_dict)
+        node_states = db.query(db_models.NodeModelState).all()
+        for ns in node_states:
+            agentic_manager.update_node_model_state(ns.node_id, ns.model_name, ns.is_active)
+    
+    task = asyncio.create_task(agentic_manager.start())
+    global_bg_tasks.add(task)
+    task.add_done_callback(global_bg_tasks.discard)
+    asyncio.create_task(agentic_manager.trigger_manual_audit("FIM"))
+    asyncio.create_task(agentic_manager.trigger_manual_audit("KEYS"))
+    
+    yield
+    
+    # --- SHUTDOWN ---
+    await agentic_manager.stop()
+
+app = FastAPI(title="SentinelForge Secure Endpoint", lifespan=lifespan)
 
 # --- PHASE 18: API SELF-PRESERVATION ---
 limiter = Limiter(key_func=get_remote_address)
@@ -54,8 +90,8 @@ async def verify_token(token: str = Depends(oauth2_scheme)):
         )
     return decoded.get("sub")
 
-# Mock DB for demonstration
-MOCK_ADMIN_HASH = get_password_hash("admin123")
+# Admin credentials (defaults for Hackfest demo, override via environment variables)
+MOCK_ADMIN_HASH = get_password_hash(os.environ.get("ADMIN_PASSWORD", "admin123"))
 
 class Token(BaseModel):
     access_token: str
@@ -94,46 +130,6 @@ async def broadcast_event(event_dict: dict):
     await sio.emit('dashboard_events', event_dict)
 
 agentic_manager = AgenticManager(callback_func=broadcast_event)
-
-# Keep a strong reference to background tasks
-global_bg_tasks = set()
-
-@app.on_event("startup")
-async def startup_event():
-    # Spin up SQLite tables if missing
-    Base.metadata.create_all(bind=engine)
-    
-    # Load dynamic configurations from DB
-    with SessionLocal() as db:
-        configs = db.query(db_models.ModelConfig).all()
-        
-        # Group configs by agent
-        agent_configs = {}
-        for c in configs:
-            if c.agent_name not in agent_configs:
-                agent_configs[c.agent_name] = {}
-            agent_configs[c.agent_name][c.parameter] = c.value
-            
-        for agent_name, config_dict in agent_configs.items():
-            await agentic_manager.update_agent_config(agent_name, config_dict)
-            
-        # Load Phase 13 granular model toggles
-        node_states = db.query(db_models.NodeModelState).all()
-        for ns in node_states:
-            agentic_manager.update_node_model_state(ns.node_id, ns.model_name, ns.is_active)
-    
-    # Start the 24/7 Engine
-    task = asyncio.create_task(agentic_manager.start())
-    global_bg_tasks.add(task)
-    task.add_done_callback(global_bg_tasks.discard)
-    
-    # Auto-Triger the FIM and KEYS agents to run continuously
-    asyncio.create_task(agentic_manager.trigger_manual_audit("FIM"))
-    asyncio.create_task(agentic_manager.trigger_manual_audit("KEYS"))
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    await agentic_manager.stop()
 
 @app.post("/token", response_model=Token)
 @limiter.limit("5/minute")

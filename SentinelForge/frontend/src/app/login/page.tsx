@@ -15,7 +15,7 @@ export default function LoginPage() {
       form.append('username', 'admin');
       form.append('password', password);
 
-      const res = await fetch('http://localhost:8000/token', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: form
@@ -75,7 +75,7 @@ export default function LoginPage() {
         </form>
         
         <div className="mt-6 border-t border-slate-800/80 pt-4 text-center">
-            <p className="text-xs text-slate-500">Hint: admin123</p>
+            <p className="text-xs text-slate-500">SentinelForge v2.3 — Autonomous EDR</p>
         </div>
       </div>
     </div>

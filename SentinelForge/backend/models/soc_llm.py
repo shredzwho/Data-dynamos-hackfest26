@@ -50,7 +50,7 @@ class SOCSupervisorLLM:
             )
             try:
                 # Generate text
-                output = self.generator(prompt, do_sample=True, temperature=0.3, max_new_tokens=40)[0]['generated_text']
+                output = self.generator(prompt, do_sample=True, temperature=0.3, max_new_tokens=60)[0]['generated_text']
                 # Strip the prompt from the output
                 response = output.replace(prompt, "").strip()
                 return f"[Generative LLM Insight]: {response}"

@@ -93,8 +93,8 @@ class IntegrityModel(BaseAgent):
         # Already launched via start()
         pass
 
-    def stop(self):
-        super().stop()
+    async def stop(self):
+        await super().stop()
         if self.observer:
             self.observer.stop()
             self.observer.join()

@@ -178,6 +178,17 @@ export default function ProfessionalDashboard() {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
+  const addLog = (source: string, message: string, type: "info" | "warn" | "error" | "success" = "info") => {
+    const newLog: LogEntry = {
+      id: Math.random().toString(36).substring(7),
+      source,
+      message,
+      type,
+      time: new Date().toLocaleTimeString([], { hour12: false })
+    };
+    setLogs(prev => [...prev, newLog].slice(-50));
+  };
+
   // Phase 23: Doomsday Protocol — auto-detect mass infection and hard reset
   useEffect(() => {
     if (nodes.length === 0) return;
@@ -209,17 +220,6 @@ export default function ProfessionalDashboard() {
       addLog("DOOMSDAY", "Hard reset complete. All endpoints restored to nominal state. Recommend full forensic sweep.", "success");
     }
   }, [nodes]);
-
-  const addLog = (source: string, message: string, type: "info" | "warn" | "error" | "success" = "info") => {
-    const newLog: LogEntry = {
-      id: Math.random().toString(36).substring(7),
-      source,
-      message,
-      type,
-      time: new Date().toLocaleTimeString([], { hour12: false })
-    };
-    setLogs(prev => [...prev, newLog].slice(-50));
-  };
 
   const triggerAudit = () => {
     addLog("Admin", `Manual Audit Initiated (${scanMode.toUpperCase()}). Waking Log Model...`, "warn");
