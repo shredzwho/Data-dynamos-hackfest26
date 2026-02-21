@@ -648,7 +648,7 @@ export default function ProfessionalDashboard() {
                 { name: "Network Packet Model", status: "Active", bg: "bg-emerald-500/20", text: "text-emerald-400", dot: "bg-emerald-500" },
                 { name: "Kernel Memory Model", status: "Active", bg: "bg-emerald-500/20", text: "text-emerald-400", dot: "bg-emerald-500" },
                 { name: "Web Heuristics Model", status: "Active", bg: "bg-emerald-500/20", text: "text-emerald-400", dot: "bg-emerald-500" },
-                { name: "Windows Log Model", status: "Standby", bg: "bg-slate-800", text: "text-slate-400", dot: "bg-slate-500" },
+                { name: "Windows Log Model", status: "Active", bg: "bg-emerald-500/20", text: "text-emerald-400", dot: "bg-emerald-500" },
                 { name: "Audit Compliance Model", status: "Ready", bg: "bg-blue-500/20", text: "text-blue-400", dot: "bg-blue-500" }
               ].map((agent, i) => (
                 <div key={i} className="flex flex-col p-4 rounded-xl border border-slate-800 bg-slate-950/50">
